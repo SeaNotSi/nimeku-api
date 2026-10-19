@@ -1,0 +1,7 @@
+{
+  "name": "nimeku-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static JSON API for anime streaming and manga reading, rebuilt by GitHub Actions",
+  "license": "MIT"
+}

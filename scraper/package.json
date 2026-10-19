@@ -1,0 +1,18 @@
+{
+  "name": "nimeku-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Static API scraper for gomunime, samehadaku, mangadex, and nhentai",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "scrape": "node scrape.mjs",
+    "scrape:gomunime": "node scrape.mjs --source=gomunime",
+    "scrape:samehadaku": "node scrape.mjs --source=samehadaku",
+    "scrape:mangadex": "node scrape.mjs --source=mangadex",
+    "scrape:nhentai": "node scrape.mjs --source=nhentai",
+    "scrape:full": "node scrape.mjs --mode=full"
+  }
+}

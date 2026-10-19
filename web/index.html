@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>nimeku — baca &amp; nonton</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/">nimeku<span>.</span></a>
+  <nav class="tabs">
+    <a href="#/anime" data-tab="anime">Anime</a>
+    <a href="#/manga" data-tab="manga">Manga</a>
+    <a href="#/manhwa" data-tab="manhwa">Manhwa</a>
+    <a href="#/doujin" data-tab="doujin">Doujin</a>
+  </nav>
+  <form class="search" id="search-form">
+    <input id="search-input" type="search" placeholder="cari judul…" autocomplete="off" />
+  </form>
+</header>
+
+<main id="app">
+  <section class="hero">
+    <h1>Baca &amp; nonton, langsung dari API statis.</h1>
+    <p>Katalog anime, manga, manhwa, dan doujin yang di-scrape terjadwal dan disajikan sebagai JSON.</p>
+  </section>
+  <div id="content"></div>
+</main>
+
+<footer class="foot">
+  <span>nimeku static api</span>
+  <span id="status">memuat…</span>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+name: scrape
+
+on:
+  schedule:
+    # Every 6 hours; GitHub may delay scheduled runs under load.
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Source to scrape'
+        required: true
+        default: 'all'
+        type: choice
+        options: [all, gomunime, samehadaku, mangadex, nhentai]
+      mode:
+        description: 'full re-walk or incremental top-up'
+        required: true
+        default: 'incremental'
+        type: choice
+        options: [incremental, full]
+      limit:
+        description: 'Max detail pages this run (0 = default)'
+        required: false
+        default: '0'
+      pagebudget:
+        description: 'MangaDex: chapter page fetches this run (0 = default)'
+        required: false
+        default: '0'
+  push:
+    branches: [main]
+    paths:
+      - 'scraper/**'
+      - '.github/workflows/scrape.yml'
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Verify scraper syntax
+        working-directory: scraper
+        run: |
+          for f in scrape.mjs lib/*.mjs; do node --check "$f"; done
+
+      - name: Scrape
+        working-directory: scraper
+        env:
+          SOURCE: ${{ github.event.inputs.source || 'all' }}
+          MODE: ${{ github.event.inputs.mode || 'incremental' }}
+          LIMIT: ${{ github.event.inputs.limit || '0' }}
+          PAGEBUDGET: ${{ github.event.inputs.pagebudget || '0' }}
+        run: |
+          node scrape.mjs --source="$SOURCE" --mode="$MODE" --limit="$LIMIT" --pagebudget="$PAGEBUDGET"
+
+      - name: Commit data
+        run: |
+          git config user.name "nimeku-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add -A data
+          if git diff --cached --quiet; then
+            echo "no data changes"
+          else
+            git commit -m "data: refresh $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
+
+  # Pushes made with GITHUB_TOKEN do not trigger other workflows, so the data
+  # commit above never fires pages.yml. Deploy here, against a fresh ref.
+  deploy:
+    needs: scrape
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/configure-pages@v5
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r web/. _site/
+          cp -r data _site/data
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

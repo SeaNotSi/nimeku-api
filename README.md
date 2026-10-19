@@ -1,0 +1,88 @@
+# nimeku — static API anime · manga · manhwa · doujin
+
+API JSON statis yang di-scrape terjadwal oleh GitHub Actions dari empat sumber, plus web kecil buat nonton dan baca langsung dari data itu.
+
+Hasil scrape di-commit otomatis ke repo ini dan disajikan lewat GitHub Pages.
+
+## Sumber data
+
+| Sumber | Isi | Catatan |
+|---|---|---|
+| **gomunime.top** | series, episode, server streaming (xtwap B-TUBE/CEPAT, mp4upload, mega, dll) | stream xtwap di-resolve per scrape |
+| **v2.samehadaku.how** | katalog anime, episode, server embed via `player_ajax`, link download | REST WP + halaman episode |
+| **MangaDex** | manga (JP) & manhwa (KR), daftar chapter, halaman chapter | halaman di-cache, karena CORS MangaDex cuma buat mangadex.org |
+| **nhentai** | galeri doujin + halaman gambar | gambar bisa hotlink langsung |
+
+## Struktur API
+
+Semua di bawah `data/`. Format list memakai chunk 500 item + `index.json` per folder:
+
+```
+data/
+  meta.json                      # ringkasan + statistik per sumber
+  state.json                     # state incremental scraper
+  gomunime/
+    list/000.json … index.json         # katalog series
+    series/<bucket>.json               # detail series (episode list, genre, rating)
+    episodes/list/…, episodes/<bucket>.json   # episode + players[{label,kind,embed,file,hls}]
+  samehadaku/
+    anime/list/…, anime/<bucket>.json  # katalog + detail anime
+    taxonomy.json                      # genre/season/studio id → nama
+    episodes/list/…, episodes/<bucket>.json   # episode + servers[{server,embedUrl}]
+    series/<bucket>.json               # episode per series (urut)
+  mangadex/
+    list/manga/…, list/manhwa/…        # katalog
+    items/<bucket>.json                # detail + chapter list (flag `baked`)
+    chapters/<bucket>.json             # halaman chapter (URL siap pakai)
+    index.json
+  nhentai/
+    list/…, items/<bucket>.json        # katalog + detail + pages
+```
+
+`<bucket>` = `fnv1a(id) % 256` dalam 2 digit hex — sama seperti `bucketOf()` di `web/app.js` dan `scraper/lib/util.mjs`.
+
+### Cara pakai dari luar
+
+- **GitHub Pages** (web + data, same-origin): `https://seanotsi.github.io/nimeku-api/`
+- **raw.githubusercontent.com**: `https://raw.githubusercontent.com/SeaNotSi/nimeku-api/main/data/meta.json` — ada `Access-Control-Allow-Origin: *`
+- **jsDelivr** (CDN + cache): `https://cdn.jsdelivr.net/gh/SeaNotSi/nimeku-api@main/data/meta.json` — ada CORS juga
+
+Contoh: list manga populer → `data/mangadex/list/manga/000.json`, detail → `data/mangadex/items/<bucket>.json`.
+
+## Scraper
+
+```
+cd scraper
+node scrape.mjs --source=all            # semua sumber, incremental
+node scrape.mjs --source=mangadex --pagebudget=600 --chapters=40
+node scrape.mjs --source=gomunime --limit=300
+node scrape.mjs --mode=full             # walk penuh (hati-hati waktu)
+```
+
+Opsi: `--source=gomunime|samehadaku|mangadex|nhentai|all`, `--mode=full|incremental`, `--limit=N` (batas detail), `--chapters=N` (chapter per judul, mangadex), `--pagebudget=N` (fetch halaman chapter, mangadex), `--offset=N`.
+
+Khusus samehadaku transport-nya `curl` (Cloudflare menolak TLS fingerprint undici). Jadi `curl` harus ada di runner.
+
+### GitHub Actions
+
+- `scrape.yml` — jalan tiap 6 jam + manual dispatch; commit otomatis ke `data/`.
+- `pages.yml` — build & deploy `web/` + `data/` ke Pages setiap push ke `main`.
+
+Stream xtwap punya masa berlaku terbatas, tapi URL player (iframe) tetap valid; scrape ulang tiap 6 jam menjaga data segar.
+
+## Web
+
+`web/` adalah SPA tanpa build step:
+
+- `#/anime` — gabungan katalog gomunime + samehadaku
+- `#/watch/...` — halaman nonton (ganti server, embed / video langsung)
+- `#/manga`, `#/manhwa` — katalog MangaDex, chapter yang sudah di-cache bisa dibaca
+- `#/doujin` — katalog nhentai, baca langsung
+- pencarian judul per tab
+
+Deploy: otomatis via `pages.yml`, atau copy isi `web/` + folder `data/` ke hosting statis mana pun.
+
+## Catatan
+
+- Konten doujin 18+; sumber data menentukan rating kontennya masing-masing.
+- ukuran `data/` bertumbuh tiap refresh; chunk 500 item menjaga file tetap kecil.

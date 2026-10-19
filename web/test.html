@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nimeku api — test bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* type — 1.200 ratio, dense console */
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --font-text:    "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --step--1: 0.833rem;
+  --step-0:  1rem;
+  --step-1:  1.2rem;
+  --step-2:  1.44rem;
+  --step-3:  1.728rem;
+  --step-4:  2.074rem;
+
+  /* space — one unit, its multiples */
+  --space-3xs: 0.25rem;
+  --space-2xs: 0.5rem;
+  --space-xs:  0.75rem;
+  --space-s:   1rem;
+  --space-m:   1.5rem;
+  --space-l:   2rem;
+  --space-xl:  3rem;
+  --space-2xl: 4.5rem;
+
+  /* color — warm black bench */
+  --base:    #0e0d0b;
+  --surface: #171512;
+  --ink:     #ece6da;
+  --ink-2:   #a89f8f;
+  --ink-3:   #6f6558;
+  --line:    #2a2620;
+  --accent:  #ffb703;   /* running, focus — under 10% of surface */
+  --ok:      #79a86b;   /* functional signal */
+  --fail:    #d1665a;   /* functional signal */
+
+  /* form — one radius: none. rules and space only. */
+  --radius: 0;
+  --border: 1px solid var(--line);
+  --shadow: none;
+
+  /* motion */
+  --dur-fast: 120ms;
+  --dur: 220ms;
+  --dur-slow: 420ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--base);
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: var(--step-0);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell { max-width: 1180px; margin: 0 auto; padding: var(--space-m) var(--space-s) var(--space-2xl); }
+
+/* ---------------------------------------------------------------- header */
+.masthead {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-s);
+  border-bottom: var(--border); padding-bottom: var(--space-xs); margin-bottom: var(--space-m);
+}
+.wordmark {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: var(--step-3); letter-spacing: 0.02em; text-transform: uppercase;
+  margin: 0;
+}
+.wordmark em { font-style: normal; color: var(--ink-3); }
+.masthead .back { margin-left: auto; color: var(--ink-2); font-size: var(--step--1); text-decoration: none; }
+.masthead .back:hover { color: var(--accent); }
+
+/* ---------------------------------------------------------------- controls */
+.controls { display: grid; gap: var(--space-xs); margin-bottom: var(--space-m); }
+.field { display: flex; flex-wrap: wrap; gap: var(--space-2xs); align-items: center; }
+.field label { color: var(--ink-3); font-size: var(--step--1); text-transform: uppercase; letter-spacing: 0.08em; }
+input[type="url"], input[type="text"] {
+  flex: 1 1 24rem; min-width: 0;
+  background: var(--surface); color: var(--ink);
+  border: var(--border); border-radius: var(--radius);
+  font: inherit; padding: var(--space-3xs) var(--space-2xs);
+}
+input:focus-visible, .btn:focus-visible, .chips button:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.presets { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
+.chips button {
+  background: none; color: var(--ink-2); border: var(--border); border-radius: var(--radius);
+  font: inherit; font-size: var(--step--1); padding: var(--space-3xs) var(--space-2xs); cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.chips button:hover { color: var(--ink); border-color: var(--ink-3); }
+.chips button[aria-pressed="true"] { color: var(--base); background: var(--accent); border-color: var(--accent); }
+.btn {
+  background: none; color: var(--ink); border: var(--border); border-radius: var(--radius);
+  font: inherit; padding: var(--space-3xs) var(--space-s); cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.btn:hover { border-color: var(--ink-3); }
+.btn:active { transform: translateY(1px); background: var(--surface); }
+.btn[disabled] { color: var(--ink-3); border-color: var(--line); cursor: progress; }
+.btn.primary { border-color: var(--accent); color: var(--accent); }
+.btn.primary:hover { background: var(--accent); color: var(--base); }
+.btn[aria-busy="true"] { color: var(--ink-3); border-color: var(--line); }
+
+/* ---------------------------------------------------------------- strip */
+.strip { display: flex; gap: 2px; flex-wrap: wrap; margin: var(--space-xs) 0 var(--space-m); }
+.seg {
+  width: 22px; height: 10px; background: var(--line);
+  transition: background var(--dur) var(--ease);
+}
+.seg.running { background: var(--accent); animation: pulse 900ms var(--ease) infinite; }
+.seg.ok { background: var(--ok); }
+.seg.fail { background: var(--fail); }
+.seg.skip { background: var(--surface); border: 1px solid var(--line); }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }
+@media (prefers-reduced-motion: reduce) { .seg.running { animation: none; } }
+
+/* ---------------------------------------------------------------- table */
+section { margin-top: var(--space-xl); }
+h2 {
+  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; font-size: var(--step-1); color: var(--ink-2);
+  margin: 0 0 var(--space-2xs); padding-bottom: var(--space-3xs); border-bottom: var(--border);
+}
+.hint { color: var(--ink-3); font-size: var(--step--1); margin: 0 0 var(--space-s); }
+
+.rows { border-top: var(--border); }
+.row {
+  display: grid; grid-template-columns: 2.6rem 1fr 4.5rem 5rem 6rem 1.3fr;
+  gap: var(--space-2xs); align-items: center;
+  padding: var(--space-2xs) var(--space-3xs);
+  border-bottom: var(--border); cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+.row:hover { background: var(--surface); }
+.row[aria-selected="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
+.row .code { color: var(--ink-3); }
+.row .code.ok { color: var(--ok); }
+.row .code.fail { color: var(--fail); }
+.row.appendix { color: var(--ink-3); }
+.row.appendix .path { color: var(--ink-3); }
+.row .path { overflow-wrap: anywhere; }
+.row .num { text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.row .note { color: var(--ink-3); font-size: var(--step--1); overflow-wrap: anywhere; }
+.row .bar { display: block; height: 6px; background: var(--line); }
+.row .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width var(--dur-slow) var(--ease-out); }
+
+/* ---------------------------------------------------------------- media + inspector */
+.media { display: flex; flex-wrap: wrap; gap: var(--space-s); }
+.thumb { width: 148px; border: var(--border); background: var(--surface); }
+.thumb img { display: block; width: 100%; height: 208px; object-fit: cover; }
+.thumb figcaption {
+  padding: var(--space-3xs) var(--space-2xs) var(--space-2xs);
+  font-size: var(--step--1); color: var(--ink-3); overflow-wrap: anywhere;
+}
+.thumb .state { display: block; }
+.thumb .state.ok { color: var(--ok); }
+.thumb .state.fail { color: var(--fail); }
+
+pre.inspector {
+  background: var(--surface); border: var(--border); border-radius: var(--radius);
+  padding: var(--space-s); margin: 0;
+  max-height: 26rem; overflow: auto;
+  font-size: var(--step--1); line-height: 1.5; color: var(--ink-2);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.inspector-actions { display: flex; gap: var(--space-2xs); margin-bottom: var(--space-2xs); }
+
+.log { font-size: var(--step--1); color: var(--ink-3); margin: var(--space-2xs) 0 0; }
+.log b { color: var(--ink-2); font-weight: 500; }
+footer { margin-top: var(--space-2xl); color: var(--ink-3); font-size: var(--step--1); border-top: var(--border); padding-top: var(--space-xs); }
+
+@media (max-width: 720px) {
+  .row { grid-template-columns: 2.2rem 1fr 4rem; grid-auto-rows: auto; }
+  .row .num, .row .note, .row .bar { grid-column: 2 / -1; text-align: left; }
+  .thumb { width: 128px; }
+  .thumb img { height: 180px; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="masthead">
+    <h1 class="wordmark">nimeku <em>// api test bench</em></h1>
+    <a class="back" href="./index.html">buka app →</a>
+  </header>
+
+  <div class="controls">
+    <div class="field">
+      <label for="base">basis data</label>
+      <input id="base" type="url" spellcheck="false" value="./data/">
+      <button id="run" class="btn primary">jalankan semua</button>
+    </div>
+    <div class="presets chips" id="presets">
+      <button data-url="./data/">lokal (repo root)</button>
+      <button data-url="../data/">lokal (dari web/)</button>
+      <button data-url="https://seanotsi.github.io/nimeku-api/data/">github pages</button>
+      <button data-url="https://cdn.jsdelivr.net/gh/SeaNotSi/nimeku-api@main/data/">jsdelivr</button>
+      <button data-url="https://raw.githubusercontent.com/SeaNotSi/nimeku-api/main/data/">raw github</button>
+    </div>
+    <p class="hint" id="origin-hint"></p>
+  </div>
+
+  <div class="strip" id="strip" aria-hidden="true"></div>
+
+  <section>
+    <h2>endpoint</h2>
+    <p class="hint">klik baris untuk inspeksi payload. “salin curl” menghasilkan perintah siap tempel.</p>
+    <div class="rows" id="rows"></div>
+    <p class="log" id="summary">belum jalan.</p>
+  </section>
+
+  <section>
+    <h2>mur / hotlink</h2>
+    <p class="hint">gambar diambil langsung dari host sumber — membuktikan referer hotlink jalan dari origin ini.</p>
+    <div class="media" id="media"></div>
+  </section>
+
+  <section>
+    <h2>inspeksi</h2>
+    <div class="inspector-actions">
+      <button class="btn" id="copy-json">salin json</button>
+      <button class="btn" id="copy-curl">salin curl</button>
+      <button class="btn" id="clear-inspect">bersihkan</button>
+    </div>
+    <pre class="inspector" id="inspector">pilih satu baris endpoint.</pre>
+  </section>
+
+  <footer>
+    nimeku-api test bench — data statis hasil scrape terjadwal; halaman ini tidak menulis apa pun.
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var DATA = './data/';
+  var $ = function (id) { return document.getElementById(id); };
+  var baseInput = $('base');
+
+  function normalizeBase(value) {
+    var v = String(value || '').trim();
+    if (!v) return DATA;
+    if (!/^(https?:)?\/\//.test(v) && v.charAt(0) !== '/' && v.charAt(0) !== '.') {
+      v = './' + v;
+    }
+    return v.replace(/\/+$/, '') + '/';
+  }
+
+  /* must stay in sync with scraper/lib/util.mjs bucketOf() */
+  function fnv1a(value) {
+    var hash = 0x811c9dc5;
+    for (var i = 0; i < value.length; i += 1) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash >>> 0;
+  }
+  function bucketOf(id) {
+    return (fnv1a(String(id)) % 256).toString(16).padStart(2, '0');
+  }
+
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(2) + ' MB';
+  }
+  function fmtMs(ms) { return ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(2) + 's'; }
+  function logLine(text) {
+    var s = $('summary');
+    s.innerHTML = s.innerHTML.replace(/<br>$/, '') + '<br>' + text;
+  }
+
+  /* ------------------------------------------------------------- checks */
+
+  var bag = {};
+
+  function checks() {
+    return [
+      { path: 'meta.json',
+        note: function (j) { bag.meta = j; return (j.sources || []).join(' · ') + ' — ' + (j.generatedAt || '?'); } },
+      { path: 'state.json',
+        note: function (j) {
+          bag.state = j;
+          return Object.keys(j).filter(function (k) { return j[k] && j[k].updatedAt; }).join(' · ');
+        } },
+
+      { path: 'gomunime/list/index.json',
+        note: function (j) { return j.count + ' judul / ' + j.chunks + ' chunk'; } },
+      { path: 'gomunime/list/000.json',
+        note: function (j) { bag.gmSeries = j[0]; return j.length + ' baris — ' + (j[0] ? j[0].title : '—'); } },
+      { path: function () { return bag.gmSeries ? 'gomunime/series/' + bucketOf(bag.gmSeries.id) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.gmSeries ? j[bag.gmSeries.id] : null;
+          bag.gmPoster = rec && (rec.poster || rec.cover);
+          return rec ? (rec.players || []).length + ' player · ' + ((rec.episodes || []).length || rec.totalEpisodes || '?') + ' episode · rating ' + (rec.rating || '—') : 'id tidak ada di bucket';
+        } },
+      { path: 'gomunime/episodes/list/index.json',
+        note: function (j) { return j.count + ' episode'; } },
+      { path: 'gomunime/episodes/list/000.json',
+        note: function (j) { bag.gmEp = j[0]; return j[0] ? j[0].slug : 'kosong'; } },
+      { path: function () { return bag.gmEp ? 'gomunime/episodes/' + bucketOf(bag.gmEp.slug) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.gmEp ? j[bag.gmEp.slug] : null;
+          return rec ? (rec.players || []).length + ' server · ' + (rec.series || '') : 'episode tidak ada di bucket';
+        } },
+
+      { path: 'samehadaku/anime/list/index.json',
+        note: function (j) { return j.count + ' anime / ' + j.chunks + ' chunk'; } },
+      { path: 'samehadaku/anime/list/000.json',
+        note: function (j) { bag.shAnime = j[0]; return j[0] ? j[0].title : 'kosong'; } },
+      { path: function () { return bag.shAnime ? 'samehadaku/anime/' + bucketOf(bag.shAnime.slug) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.shAnime ? j[bag.shAnime.slug] : null;
+          bag.shPoster = rec && rec.poster;
+          return rec ? ((rec.genres || []).length + ' genre · season ' + ((rec.season || []).join(',') || '—')) : 'anime tidak ada di bucket';
+        } },
+      { path: 'samehadaku/taxonomy.json',
+        note: function (j) { return Object.keys(j.genre || {}).length + ' genre · ' + Object.keys(j.studio || {}).length + ' studio'; } },
+      { path: 'samehadaku/episodes/list/000.json',
+        note: function (j) { bag.shEp = j[0]; return j.length + ' episode — ' + (j[0] ? j[0].title : '—'); } },
+      { path: function () { return bag.shEp ? 'samehadaku/episodes/' + bucketOf(bag.shEp.slug) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.shEp ? j[bag.shEp.slug] : null;
+          if (rec && rec.seriesUrl) bag.shSeriesSlug = rec.seriesUrl.replace(/\/+$/, '').split('/').pop();
+          return rec ? ((rec.servers || []).length + ' server · ' + (rec.seriesTitle || '—')) : 'episode tidak ada di bucket';
+        } },
+      { path: function () { return bag.shSeriesSlug ? 'samehadaku/series/' + bucketOf(bag.shSeriesSlug) + '.json' : null; },
+        skipNote: 'seriesUrl null',
+        note: function (j) {
+          var rec = bag.shSeriesSlug ? j[bag.shSeriesSlug] : null;
+          return rec ? ((rec.episodes || []).length + ' episode terindeks · ' + rec.title) : 'seri tidak ada di bucket';
+        } },
+
+      { path: 'mangadex/index.json',
+        note: function (j) { return j.items + ' judul · ' + j.chaptersBaked + ' chapter matang'; } },
+      { path: 'mangadex/list/manga/index.json',
+        note: function (j) { return j.count + ' manga'; } },
+      { path: 'mangadex/list/manga/000.json',
+        note: function (j) { bag.mdxItem = j[0]; return j[0] ? j[0].title : 'kosong'; } },
+      { path: function () { return bag.mdxItem ? 'mangadex/items/' + bucketOf(bag.mdxItem.id) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.mdxItem ? j[bag.mdxItem.id] : null;
+          if (rec) { bag.mdxCover = rec.poster; bag.mdxCh = (rec.chapters || [])[0]; }
+          return rec ? ((rec.chapters || []).length + ' chapter · follows ' + (rec.follows || '—')) : 'judul tidak ada di bucket';
+        } },
+      { path: function () { return bag.mdxCh ? 'mangadex/chapters/' + bucketOf(bag.mdxCh.id) + '.json' : null; },
+        skipNote: 'belum ada chapter matang',
+        note: function (j) {
+          var rec = bag.mdxCh ? j[bag.mdxCh.id] : null;
+          return rec ? ((rec.pages || []).length + ' halaman siap baca · ch ' + (rec.number || '?')) : 'chapter tidak ada di bucket';
+        } },
+      { path: 'mangadex/list/manhwa/index.json',
+        note: function (j) { return j.count + ' manhwa'; } },
+      { path: 'mangadex/list/manhwa/000.json',
+        note: function (j) { return j.length + ' baris — ' + (j[0] ? j[0].title : '—'); } },
+
+      { path: 'nhentai/list/index.json',
+        note: function (j) { return j.count + ' doujin'; } },
+      { path: 'nhentai/list/000.json',
+        note: function (j) { bag.nhItem = j[0]; return j[0] ? j[0].title : 'kosong'; } },
+      { path: function () { return bag.nhItem ? 'nhentai/items/' + bucketOf(bag.nhItem.id) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.nhItem ? j[bag.nhItem.id] : null;
+          if (rec) { bag.nhCover = rec.thumbnail || rec.cover; bag.nhPages = (rec.pages || []).length; }
+          return rec ? (bag.nhPages + ' halaman · ' + ((rec.tags || []).length) + ' tag') : 'gallery tidak ada di bucket';
+        } }
+    ];
+  }
+
+  /* ------------------------------------------------------------- render */
+
+  var state = { running: false, results: [], selected: null };
+
+  function buildStrip(count) {
+    var strip = $('strip');
+    strip.innerHTML = '';
+    for (var i = 0; i < count; i += 1) {
+      var seg = document.createElement('div');
+      seg.className = 'seg';
+      strip.appendChild(seg);
+    }
+  }
+
+  function rowHtml() {
+    var rows = $('rows');
+    var maxMs = state.results.reduce(function (m, r) { return r.ms && r.ms > m ? r.ms : m; }, 1);
+    rows.innerHTML = state.results.map(function (r, i) {
+      var cls = r.skip ? 'appendix' : (r.error || !(r.status >= 200 && r.status < 300) ? 'fail' : 'ok');
+      var codeCell = r.skip
+        ? '<span class="code">—</span>'
+        : r.error
+          ? '<span class="code fail">ERR</span>'
+          : '<span class="code ' + cls + '">' + r.status + '</span>';
+      var barPct = r.ms ? Math.max(2, Math.round((r.ms / maxMs) * 100)) : 0;
+      return '<div class="row" data-i="' + i + '" role="button" tabindex="0">' +
+        codeCell +
+        '<span class="path">' + escapeHtml(r.path) + '</span>' +
+        '<span class="num">' + (r.ms == null ? '—' : fmtMs(r.ms)) + '</span>' +
+        '<span class="num">' + (r.bytes == null ? '—' : fmtBytes(r.bytes)) + '</span>' +
+        '<span class="bar"><i style="width:' + barPct + '%"></i></span>' +
+        '<span class="note">' + escapeHtml(r.error || r.note || '') + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function select(i) {
+    state.selected = i;
+    var r = state.results[i];
+    Array.prototype.forEach.call(document.querySelectorAll('.row'), function (el) {
+      el.setAttribute('aria-selected', String(Number(el.dataset.i) === i));
+    });
+    var out = $('inspector');
+    if (!r) { out.textContent = 'pilih satu baris endpoint.'; return; }
+    if (r.skip) { out.textContent = 'DILEWATI  ' + r.path + '\n\n' + (r.note || ''); return; }
+    var head = (r.error ? 'ERROR  ' : r.status + '  ') + r.path + '  (' + fmtBytes(r.bytes || 0) + ', ' + fmtMs(r.ms || 0) + ')';
+    out.textContent = head + '\n\n' + (r.body == null ? '(tidak ada body)' : r.pretty || '');
+  }
+
+  /* ------------------------------------------------------------- run */
+
+  async function runAll() {
+    if (state.running) return;
+    state.running = true;
+    var base = normalizeBase(baseInput.value);
+    baseInput.value = base;
+    var list = checks();
+    state.results = [];
+    buildStrip(list.length);
+    rowHtml();
+    $('summary').textContent = 'jalan…';
+    $('media').innerHTML = '';
+    var runBtn = $('run');
+    runBtn.disabled = true;
+    runBtn.setAttribute('aria-busy', 'true');
+    runBtn.textContent = 'jalan…';
+
+    var segs = document.querySelectorAll('.seg');
+    var t0 = performance.now();
+
+    for (var i = 0; i < list.length; i += 1) {
+      var item = list[i];
+      var path = typeof item.path === 'function' ? item.path() : item.path;
+      segs[i].className = 'seg running';
+      if (!path) {
+        segs[i].className = 'seg skip';
+        state.results.push({ path: '(dilewati)', skip: true, ms: null, bytes: null, note: item.skipNote || 'tidak ada dependensi', body: null });
+        rowHtml();
+        continue;
+      }
+      var t = performance.now();
+      var result = { path: path, ms: null, bytes: null, status: null, error: null, note: '', body: null };
+      try {
+        var res = await fetch(base + path, { cache: 'no-store', credentials: 'omit' });
+        var text = await res.text();
+        result.status = res.status;
+        result.bytes = new Blob([text]).size;
+        result.ms = Math.round(performance.now() - t);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var json = JSON.parse(text);
+        result.body = json;
+        result.pretty = JSON.stringify(json, null, 2);
+        if (result.pretty.length > 120000) result.pretty = result.pretty.slice(0, 120000) + '\n… (dipotong)';
+        result.note = item.note ? item.note(json) : 'ok';
+        segs[i].className = 'seg ok';
+      } catch (err) {
+        result.ms = result.ms || Math.round(performance.now() - t);
+        result.error = err.message === 'Failed to fetch' && location.protocol === 'file:'
+          ? 'file:// tidak bisa fetch — serve lewat http'
+          : err.message;
+        segs[i].className = 'seg fail';
+      }
+      state.results.push(result);
+      rowHtml();
+      logLine('<b>' + (result.error ? 'fail' : result.status) + '</b> ' + escapeHtml(path));
+    }
+
+    rowHtml();
+    renderMedia();
+    var ok = state.results.filter(function (r) { return !r.skip && !r.error && r.status >= 200 && r.status < 300; }).length;
+    var fail = state.results.filter(function (r) { return !r.skip && (r.error || !(r.status >= 200 && r.status < 300)); }).length;
+    var skipped = state.results.filter(function (r) { return r.skip; }).length;
+    $('summary').innerHTML = 'selesai dalam ' + fmtMs(Math.round(performance.now() - t0)) +
+      ' — <b>' + ok + ' ok</b>' + (fail ? ' · <b>' + fail + ' gagal</b>' : '') + (skipped ? ' · ' + skipped + ' dilewati' : '');
+    runBtn.disabled = false;
+    runBtn.removeAttribute('aria-busy');
+    runBtn.textContent = 'jalankan semua';
+    state.running = false;
+  }
+
+  function renderMedia() {
+    var picks = [];
+    if (bag.gmPoster) picks.push({ label: 'gomunime poster', src: bag.gmPoster });
+    if (bag.shPoster) picks.push({ label: 'samehadaku poster', src: bag.shPoster });
+    if (bag.mdxCover) picks.push({ label: 'mangadex cover', src: bag.mdxCover });
+    if (bag.nhCover) picks.push({ label: 'nhentai thumb', src: bag.nhCover });
+    var wrap = $('media');
+    if (!picks.length) { wrap.innerHTML = '<p class="hint">tidak ada gambar ditemukan — jalankan dulu.</p>'; return; }
+    wrap.innerHTML = picks.map(function (p, i) {
+      return '<figure class="thumb">' +
+        '<img src="' + escapeHtml(p.src) + '" alt="" referrerpolicy="no-referrer" loading="lazy" data-i="' + i + '">' +
+        '<figcaption>' + escapeHtml(p.label) + '<span class="state">memuat…</span></figcaption>' +
+        '</figure>';
+    }).join('');
+    Array.prototype.forEach.call(wrap.querySelectorAll('img'), function (img) {
+      img.addEventListener('load', function () {
+        img.parentElement.querySelector('.state').textContent = 'hotlink ok · ' + img.naturalWidth + '×' + img.naturalHeight;
+        img.parentElement.querySelector('.state').className = 'state ok';
+      });
+      img.addEventListener('error', function () {
+        img.parentElement.querySelector('.state').textContent = 'gagal dimuat (403 / referer)';
+        img.parentElement.querySelector('.state').className = 'state fail';
+      });
+    });
+  }
+
+  /* ------------------------------------------------------------- wire */
+
+  baseInput.addEventListener('change', runAll);
+
+  $('presets').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-url]');
+    if (!btn) return;
+    baseInput.value = btn.dataset.url;
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
+    runAll();
+  });
+
+  $('run').addEventListener('click', runAll);
+
+  $('rows').addEventListener('click', function (e) {
+    var row = e.target.closest('.row');
+    if (row) select(Number(row.dataset.i));
+  });
+  $('rows').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var row = e.target.closest('.row');
+    if (row) { e.preventDefault(); select(Number(row.dataset.i)); }
+  });
+
+  $('copy-json').addEventListener('click', function () {
+    var r = state.results[state.selected];
+    if (r && r.pretty) navigator.clipboard.writeText(r.pretty);
+  });
+  $('copy-curl').addEventListener('click', function () {
+    var r = state.results[state.selected];
+    if (r) navigator.clipboard.writeText('curl -sL "' + normalizeBase(baseInput.value) + r.path + '"');
+  });
+  $('clear-inspect').addEventListener('click', function () {
+    $('inspector').textContent = 'pilih satu baris endpoint.';
+    Array.prototype.forEach.call(document.querySelectorAll('.row'), function (el) { el.setAttribute('aria-selected', 'false'); });
+  });
+
+  /* default base: repo root keeps data/ next to web/ */
+  if (location.pathname.endsWith('/web/test.html') || location.pathname.endsWith('/web/')) {
+    baseInput.value = '../data/';
+  } else if (location.protocol === 'file:') {
+    baseInput.value = '../data/';
+  } else {
+    baseInput.value = './data/';
+  }
+  $('origin-hint').textContent = 'origin: ' + location.origin + location.pathname + ' — fetch anonim, tanpa kredensial.';
+
+  runAll();
+}());
+</script>
+</body>
+</html>
