@@ -3,23 +3,39 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>nimeku api — test bench</title>
+<title>nimeku api — lembar uji</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* ============================================================ tokens */
 :root {
-  /* type — 1.200 ratio, dense console */
-  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
-  --font-text:    "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
-  --step--1: 0.833rem;
-  --step-0:  1rem;
-  --step-1:  1.2rem;
-  --step-2:  1.44rem;
-  --step-3:  1.728rem;
-  --step-4:  2.074rem;
+  /* paper + riso inks */
+  --paper:  #EAE7E2;
+  --slip:   #F7F5F1;
+  --ink:    #17151F;
+  --ink-2:  #4C4A57;
+  --ink-3:  #8B8894;
+  --rule:   #C9C5BE;
+  --blue:   #2B3FD8;   /* federal blue — lolos */
+  --pink:   #FF3E8A;   /* fluorescent pink — gagal / sorot */
+  --blue-soft: rgba(43, 63, 216, 0.14);
+  --pink-soft: rgba(255, 62, 138, 0.16);
 
-  /* space — one unit, its multiples */
+  --font-display: "Archivo Black", "Arial Black", sans-serif;
+  --font-text:    "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-mono:    "DM Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* type — 1.333 perfect fourth, poster scale */
+  --step--1: 0.75rem;
+  --step-0:  0.938rem;
+  --step-1:  1.25rem;
+  --step-2:  1.666rem;
+  --step-3:  2.221rem;
+  --step-4:  2.960rem;
+  --step-5:  3.945rem;
+
+  /* space — 4px base units */
   --space-3xs: 0.25rem;
   --space-2xs: 0.5rem;
   --space-xs:  0.75rem;
@@ -29,219 +45,229 @@
   --space-xl:  3rem;
   --space-2xl: 4.5rem;
 
-  /* color — warm black bench */
-  --base:    #0e0d0b;
-  --surface: #171512;
-  --ink:     #ece6da;
-  --ink-2:   #a89f8f;
-  --ink-3:   #6f6558;
-  --line:    #2a2620;
-  --accent:  #ffb703;   /* running, focus — under 10% of surface */
-  --ok:      #79a86b;   /* functional signal */
-  --fail:    #d1665a;   /* functional signal */
-
-  /* form — one radius: none. rules and space only. */
-  --radius: 0;
-  --border: 1px solid var(--line);
-  --shadow: none;
+  /* form — paper cuts: no radius, ink rules */
+  --rule-hair: 1px solid var(--rule);
+  --rule-ink:  2px solid var(--ink);
 
   /* motion */
-  --dur-fast: 120ms;
-  --dur: 220ms;
-  --dur-slow: 420ms;
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --stamp: 140ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
+html, body { margin: 0; }
 body {
-  background: var(--base);
+  background: var(--paper);
   color: var(--ink);
   font-family: var(--font-text);
   font-size: var(--step-0);
-  line-height: 1.55;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+.sheet { max-width: 1060px; margin: 0 auto; padding: var(--space-m) var(--space-s) var(--space-2xl); }
 
-.shell { max-width: 1180px; margin: 0 auto; padding: var(--space-m) var(--space-s) var(--space-2xl); }
+a { color: var(--blue); }
+:focus-visible { outline: 3px solid var(--pink); outline-offset: 2px; }
 
-/* ---------------------------------------------------------------- header */
-.masthead {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-s);
-  border-bottom: var(--border); padding-bottom: var(--space-xs); margin-bottom: var(--space-m);
-}
+/* ============================================================ masthead */
+.masthead { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-s); flex-wrap: wrap; padding-bottom: var(--space-2xs); border-bottom: var(--rule-ink); }
 .wordmark {
-  font-family: var(--font-display); font-weight: 700;
-  font-size: var(--step-3); letter-spacing: 0.02em; text-transform: uppercase;
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 7vw, var(--step-4));
+  line-height: 0.95;
   margin: 0;
+  letter-spacing: -0.02em;
+  color: var(--blue);
+  text-shadow: 3px 3px 0 var(--pink);
 }
-.wordmark em { font-style: normal; color: var(--ink-3); }
-.masthead .back { margin-left: auto; color: var(--ink-2); font-size: var(--step--1); text-decoration: none; }
-.masthead .back:hover { color: var(--accent); }
+.wordmark small { display: block; font-family: var(--font-text); font-weight: 600; font-size: var(--step-0); letter-spacing: 0.14em; color: var(--ink); text-shadow: none; margin-top: var(--space-3xs); }
+.masthead .links { text-align: right; font-size: var(--step--1); color: var(--ink-2); }
+.masthead .links a { font-weight: 600; }
 
-/* ---------------------------------------------------------------- controls */
-.controls { display: grid; gap: var(--space-xs); margin-bottom: var(--space-m); }
-.field { display: flex; flex-wrap: wrap; gap: var(--space-2xs); align-items: center; }
-.field label { color: var(--ink-3); font-size: var(--step--1); text-transform: uppercase; letter-spacing: 0.08em; }
-input[type="url"], input[type="text"] {
-  flex: 1 1 24rem; min-width: 0;
-  background: var(--surface); color: var(--ink);
-  border: var(--border); border-radius: var(--radius);
-  font: inherit; padding: var(--space-3xs) var(--space-2xs);
+/* ============================================================ control */
+.control { display: grid; gap: var(--space-xs); padding: var(--space-s) 0 var(--space-m); border-bottom: var(--rule-hair); }
+.control .row { display: flex; flex-wrap: wrap; gap: var(--space-2xs); align-items: stretch; }
+.control label { display: flex; align-items: center; font-weight: 600; font-size: var(--step--1); letter-spacing: 0.1em; }
+.control input {
+  flex: 1 1 22rem; min-width: 0;
+  background: var(--slip);
+  border: var(--rule-ink);
+  border-radius: 0;
+  font: 500 var(--step-0)/1.3 var(--font-mono);
+  color: var(--ink);
+  padding: var(--space-2xs) var(--space-xs);
 }
-input:focus-visible, .btn:focus-visible, .chips button:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 2px;
-}
-.presets { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
-.chips { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
-.chips button {
-  background: none; color: var(--ink-2); border: var(--border); border-radius: var(--radius);
-  font: inherit; font-size: var(--step--1); padding: var(--space-3xs) var(--space-2xs); cursor: pointer;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
-}
-.chips button:hover { color: var(--ink); border-color: var(--ink-3); }
-.chips button[aria-pressed="true"] { color: var(--base); background: var(--accent); border-color: var(--accent); }
 .btn {
-  background: none; color: var(--ink); border: var(--border); border-radius: var(--radius);
-  font: inherit; padding: var(--space-3xs) var(--space-s); cursor: pointer;
-  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
-              transform var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  font: 600 var(--step-0)/1 var(--font-text);
+  background: var(--slip);
+  border: var(--rule-ink); border-radius: 0;
+  color: var(--ink);
+  padding: var(--space-2xs) var(--space-s);
+  cursor: pointer;
+  transition: transform var(--stamp), background var(--stamp), color var(--stamp);
 }
-.btn:hover { border-color: var(--ink-3); }
-.btn:active { transform: translateY(1px); background: var(--surface); }
-.btn[disabled] { color: var(--ink-3); border-color: var(--line); cursor: progress; }
-.btn.primary { border-color: var(--accent); color: var(--accent); }
-.btn.primary:hover { background: var(--accent); color: var(--base); }
-.btn[aria-busy="true"] { color: var(--ink-3); border-color: var(--line); }
+.btn:hover { background: var(--blue-soft); }
+.btn:active { transform: translate(2px, 2px); }
+.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; box-shadow: 3px 3px 0 var(--pink); }
+.btn.primary:hover { background: #1F2FB0; }
+.btn.primary:active { box-shadow: 1px 1px 0 var(--pink); }
+.btn[disabled] { opacity: 0.55; cursor: progress; box-shadow: none; }
+.presets { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
+.presets .btn { font-size: var(--step--1); padding: var(--space-3xs) var(--space-xs); font-weight: 500; }
+.presets .btn[aria-pressed="true"] { background: var(--pink); border-color: var(--pink); color: #fff; }
+.origin { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); margin: 0; overflow-wrap: anywhere; }
 
-/* ---------------------------------------------------------------- strip */
-.strip { display: flex; gap: 2px; flex-wrap: wrap; margin: var(--space-xs) 0 var(--space-m); }
+/* ============================================================ ink strip */
+.strip-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-s); margin: var(--space-m) 0 var(--space-2xs); }
+.strip-head h2 { font-family: var(--font-display); font-size: var(--step-1); margin: 0; letter-spacing: 0.02em; }
+.strip { display: flex; flex-wrap: wrap; gap: 4px; }
 .seg {
-  width: 22px; height: 10px; background: var(--line);
-  transition: background var(--dur) var(--ease);
+  width: 26px; height: 26px;
+  border: 1.5px solid var(--rule);
+  background:
+    radial-gradient(circle at 50% 50%, var(--ink-3) 1.4px, transparent 1.6px) 0 0 / 6px 6px;
+  transition: background-color var(--stamp), border-color var(--stamp);
 }
-.seg.running { background: var(--accent); animation: pulse 900ms var(--ease) infinite; }
-.seg.ok { background: var(--ok); }
-.seg.fail { background: var(--fail); }
-.seg.skip { background: var(--surface); border: 1px solid var(--line); }
-@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }
+.seg.running { border-color: var(--pink); background: var(--pink-soft); animation: throb 700ms ease-in-out infinite; }
+.seg.ok { border-color: var(--blue); background: var(--blue); }
+.seg.fail { border-color: var(--pink); background: var(--pink); }
+.seg.skip { border-style: dashed; background: none; }
+@keyframes throb { 50% { background: var(--pink); } }
 @media (prefers-reduced-motion: reduce) { .seg.running { animation: none; } }
 
-/* ---------------------------------------------------------------- table */
-section { margin-top: var(--space-xl); }
-h2 {
-  font-family: var(--font-display); font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.08em; font-size: var(--step-1); color: var(--ink-2);
-  margin: 0 0 var(--space-2xs); padding-bottom: var(--space-3xs); border-bottom: var(--border);
+.stamp {
+  display: inline-block;
+  border: 2px solid var(--blue); color: var(--blue);
+  font: 700 var(--step-0)/1 var(--font-text);
+  padding: var(--space-3xs) var(--space-2xs);
+  transform: rotate(-1.2deg);
+  background: var(--blue-soft);
 }
-.hint { color: var(--ink-3); font-size: var(--step--1); margin: 0 0 var(--space-s); }
+.stamp.has-fail { border-color: var(--pink); color: var(--pink); background: var(--pink-soft); }
 
-.rows { border-top: var(--border); }
-.row {
-  display: grid; grid-template-columns: 2.6rem 1fr 4.5rem 5rem 6rem 1.3fr;
-  gap: var(--space-2xs); align-items: center;
+/* ============================================================ probe sheet */
+.section-title { font-family: var(--font-display); font-size: var(--step-2); margin: var(--space-xl) 0 var(--space-2xs); letter-spacing: -0.01em; }
+.section-note { color: var(--ink-2); font-size: var(--step--1); margin: 0 0 var(--space-s); max-width: 62ch; }
+
+.tickets { border-top: var(--rule-ink); }
+.ticket {
+  display: grid;
+  /* no · path · code · ms · bytes · bar · note */
+  grid-template-columns: 2.2rem minmax(0, 1fr) 3.4rem 4.2rem 4.8rem minmax(4.5rem, 6.5rem) minmax(0, 1.3fr);
+  gap: var(--space-2xs);
+  align-items: center;
   padding: var(--space-2xs) var(--space-3xs);
-  border-bottom: var(--border); cursor: pointer;
-  transition: background var(--dur-fast) var(--ease);
+  border-bottom: var(--rule-hair);
+  cursor: pointer;
+  background: transparent;
+  transition: background var(--stamp);
 }
-.row:hover { background: var(--surface); }
-.row[aria-selected="true"] { background: var(--surface); box-shadow: inset 2px 0 0 var(--accent); }
-.row .code { color: var(--ink-3); }
-.row .code.ok { color: var(--ok); }
-.row .code.fail { color: var(--fail); }
-.row.appendix { color: var(--ink-3); }
-.row.appendix .path { color: var(--ink-3); }
-.row .path { overflow-wrap: anywhere; }
-.row .num { text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.row .note { color: var(--ink-3); font-size: var(--step--1); overflow-wrap: anywhere; }
-.row .bar { display: block; height: 6px; background: var(--line); }
-.row .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width var(--dur-slow) var(--ease-out); }
+.ticket:hover { background: var(--slip); }
+.ticket[aria-selected="true"] { background: var(--slip); box-shadow: inset 4px 0 0 var(--pink); }
+.ticket .no { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); }
+.ticket .path { font-family: var(--font-mono); font-size: var(--step--1); overflow-wrap: anywhere; }
+.ticket .code { font-family: var(--font-mono); font-weight: 500; font-size: var(--step--1); color: var(--ink-2); }
+.ticket .code.ok { color: var(--blue); }
+.ticket .code.fail { color: var(--pink); }
+.ticket .num { text-align: right; font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ticket .bar { height: 10px; border: 1px solid var(--rule); background: none; }
+.ticket .bar i { display: block; height: 100%; width: 0; background: var(--blue); transition: width 380ms cubic-bezier(0.16, 1, 0.3, 1); }
+.ticket.is-fail .bar i { background: var(--pink); }
+.ticket .note { font-size: var(--step--1); color: var(--ink-2); overflow-wrap: anywhere; }
+.ticket.is-skip .path, .ticket.is-skip .note { color: var(--ink-3); }
 
-/* ---------------------------------------------------------------- media + inspector */
-.media { display: flex; flex-wrap: wrap; gap: var(--space-s); }
-.thumb { width: 148px; border: var(--border); background: var(--surface); }
-.thumb img { display: block; width: 100%; height: 208px; object-fit: cover; }
-.thumb figcaption {
-  padding: var(--space-3xs) var(--space-2xs) var(--space-2xs);
-  font-size: var(--step--1); color: var(--ink-3); overflow-wrap: anywhere;
-}
-.thumb .state { display: block; }
-.thumb .state.ok { color: var(--ok); }
-.thumb .state.fail { color: var(--fail); }
+/* ============================================================ prints */
+.prints { display: flex; flex-wrap: wrap; gap: var(--space-m); }
+.print { margin: 0; width: 168px; background: var(--slip); border: 1px solid var(--rule); padding: var(--space-2xs); box-shadow: 4px 4px 0 var(--rule); }
+.print img { display: block; width: 100%; height: 232px; object-fit: cover; background: var(--paper); }
+.print figcaption { font-size: var(--step--1); color: var(--ink-2); padding-top: var(--space-2xs); }
+.print .state { display: block; font-weight: 600; color: var(--ink-3); }
+.print .state.ok { color: var(--blue); }
+.print .state.fail { color: var(--pink); }
 
+/* ============================================================ inspector */
+.inspector-bar { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin-bottom: var(--space-2xs); }
 pre.inspector {
-  background: var(--surface); border: var(--border); border-radius: var(--radius);
-  padding: var(--space-s); margin: 0;
-  max-height: 26rem; overflow: auto;
-  font-size: var(--step--1); line-height: 1.5; color: var(--ink-2);
-  white-space: pre-wrap; overflow-wrap: anywhere;
+  margin: 0;
+  background: var(--slip);
+  border: var(--rule-ink);
+  padding: var(--space-s);
+  font: 400 var(--step--1)/1.6 var(--font-mono);
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 30rem;
+  overflow: auto;
+  background-image: repeating-linear-gradient(transparent 0 1.55rem, var(--rule) 1.55rem 1.6rem);
 }
-.inspector-actions { display: flex; gap: var(--space-2xs); margin-bottom: var(--space-2xs); }
 
-.log { font-size: var(--step--1); color: var(--ink-3); margin: var(--space-2xs) 0 0; }
-.log b { color: var(--ink-2); font-weight: 500; }
-footer { margin-top: var(--space-2xl); color: var(--ink-3); font-size: var(--step--1); border-top: var(--border); padding-top: var(--space-xs); }
+.note-box { margin-top: var(--space-m); border: var(--rule-ink); background: var(--slip); padding: var(--space-xs) var(--space-s); font-size: var(--step--1); color: var(--ink-2); max-width: 68ch; }
+.note-box b { color: var(--ink); }
+.foot { margin-top: var(--space-2xl); padding-top: var(--space-xs); border-top: var(--rule-hair); color: var(--ink-3); font-size: var(--step--1); display: flex; justify-content: space-between; gap: var(--space-s); flex-wrap: wrap; }
 
-@media (max-width: 720px) {
-  .row { grid-template-columns: 2.2rem 1fr 4rem; grid-auto-rows: auto; }
-  .row .num, .row .note, .row .bar { grid-column: 2 / -1; text-align: left; }
-  .thumb { width: 128px; }
-  .thumb img { height: 180px; }
+@media (max-width: 760px) {
+  .ticket { grid-template-columns: 2rem minmax(0, 1fr) 3.4rem; }
+  .ticket .num, .ticket .bar, .ticket .note { grid-column: 2 / -1; text-align: left; }
+  .print { width: 136px; }
+  .print img { height: 188px; }
 }
 </style>
 </head>
 <body>
-<div class="shell">
+<div class="sheet">
 
   <header class="masthead">
-    <h1 class="wordmark">nimeku <em>// api test bench</em></h1>
-    <a class="back" href="./index.html">buka app →</a>
+    <h1 class="wordmark">nimeku api<small>lembar uji — 4 sumber, satu meja</small></h1>
+    <div class="links">
+      <a href="./index.html">buka app →</a><br>
+      <span id="origin">origin: —</span>
+    </div>
   </header>
 
-  <div class="controls">
-    <div class="field">
+  <div class="control">
+    <div class="row">
       <label for="base">basis data</label>
       <input id="base" type="url" spellcheck="false" value="./data/">
       <button id="run" class="btn primary">jalankan semua</button>
     </div>
-    <div class="presets chips" id="presets">
-      <button data-url="./data/">lokal (repo root)</button>
-      <button data-url="../data/">lokal (dari web/)</button>
-      <button data-url="https://seanotsi.github.io/nimeku-api/data/">github pages</button>
-      <button data-url="https://cdn.jsdelivr.net/gh/SeaNotSi/nimeku-api@main/data/">jsdelivr</button>
-      <button data-url="https://raw.githubusercontent.com/SeaNotSi/nimeku-api/main/data/">raw github</button>
+    <div class="presets" id="presets">
+      <button class="btn" data-url="./data/">pages (sama-origin)</button>
+      <button class="btn" data-url="../data/">lokal dari web/</button>
+      <button class="btn" data-url="https://seanotsi.github.io/nimeku-api/data/">github pages</button>
+      <button class="btn" data-url="https://cdn.jsdelivr.net/gh/SeaNotSi/nimeku-api@main/data/">jsdelivr</button>
+      <button class="btn" data-url="https://raw.githubusercontent.com/SeaNotSi/nimeku-api/main/data/">raw github</button>
     </div>
-    <p class="hint" id="origin-hint"></p>
+    <p class="origin" id="hint">fetch anonim, tanpa kredensial. jalankan untuk menembak 25 titik uji berantai.</p>
   </div>
 
-  <div class="strip" id="strip" aria-hidden="true"></div>
+  <div class="strip-head">
+    <h2>hasil uji</h2>
+    <span class="stamp" id="stamp">belum dijalankan</span>
+  </div>
+  <div class="strip" id="strip"></div>
 
-  <section>
-    <h2>endpoint</h2>
-    <p class="hint">klik baris untuk inspeksi payload. “salin curl” menghasilkan perintah siap tempel.</p>
-    <div class="rows" id="rows"></div>
-    <p class="log" id="summary">belum jalan.</p>
-  </section>
+  <h2 class="section-title">titik uji</h2>
+  <p class="section-note">urutan uji saling bergantung: id dari katalog dipakai untuk mengambil bucket detail, chapter, dan episode. klik satu baris untuk melihat payload mentahnya.</p>
+  <div class="tickets" id="rows"></div>
 
-  <section>
-    <h2>mur / hotlink</h2>
-    <p class="hint">gambar diambil langsung dari host sumber — membuktikan referer hotlink jalan dari origin ini.</p>
-    <div class="media" id="media"></div>
-  </section>
+  <h2 class="section-title">cetakan gambar</h2>
+  <p class="section-note">poster diambil langsung dari host sumber — kalau host memblokir hotlink, cetakannya kosong.</p>
+  <div class="prints" id="prints"></div>
 
-  <section>
-    <h2>inspeksi</h2>
-    <div class="inspector-actions">
-      <button class="btn" id="copy-json">salin json</button>
-      <button class="btn" id="copy-curl">salin curl</button>
-      <button class="btn" id="clear-inspect">bersihkan</button>
-    </div>
-    <pre class="inspector" id="inspector">pilih satu baris endpoint.</pre>
-  </section>
+  <h2 class="section-title">inspeksi payload</h2>
+  <div class="inspector-bar">
+    <button class="btn" id="copy-json">salin json</button>
+    <button class="btn" id="copy-curl">salin curl</button>
+    <button class="btn" id="clear-inspect">kosongkan</button>
+  </div>
+  <pre class="inspector" id="inspector">pilih satu baris titik uji.</pre>
 
-  <footer>
-    nimeku-api test bench — data statis hasil scrape terjadwal; halaman ini tidak menulis apa pun.
+  <div class="note-box">
+    <b>cara pakai.</b> halaman ini hanya membaca: data statis dari repo nimeku-api, hasil scrape terjadwal tiap 6 jam. titik uji json membuktikan bentuk data, blok cetakan membuktikan hotlink gambar, baris curl untuk ditempel di terminal.
+  </div>
+
+  <footer class="foot">
+    <span>nimeku-api — lembar uji statis</span>
+    <span id="clock">—</span>
   </footer>
 </div>
 
@@ -249,20 +275,17 @@ footer { margin-top: var(--space-2xl); color: var(--ink-3); font-size: var(--ste
 (function () {
   'use strict';
 
-  var DATA = './data/';
   var $ = function (id) { return document.getElementById(id); };
   var baseInput = $('base');
 
   function normalizeBase(value) {
     var v = String(value || '').trim();
-    if (!v) return DATA;
-    if (!/^(https?:)?\/\//.test(v) && v.charAt(0) !== '/' && v.charAt(0) !== '.') {
-      v = './' + v;
-    }
+    if (!v) return './data/';
+    if (!/^(https?:)?\/\//.test(v) && v.charAt(0) !== '/' && v.charAt(0) !== '.') v = './' + v;
     return v.replace(/\/+$/, '') + '/';
   }
 
-  /* must stay in sync with scraper/lib/util.mjs bucketOf() */
+  /* harus sama persis dengan bucketOf() di scraper/lib/util.mjs */
   function fnv1a(value) {
     var hash = 0x811c9dc5;
     for (var i = 0; i < value.length; i += 1) {
@@ -271,175 +294,174 @@ footer { margin-top: var(--space-2xl); color: var(--ink-3); font-size: var(--ste
     }
     return hash >>> 0;
   }
-  function bucketOf(id) {
-    return (fnv1a(String(id)) % 256).toString(16).padStart(2, '0');
-  }
+  var bucketOf = function (id) { return (fnv1a(String(id)) % 256).toString(16).padStart(2, '0'); };
 
   function fmtBytes(n) {
     if (n < 1024) return n + ' B';
     if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
     return (n / 1048576).toFixed(2) + ' MB';
   }
-  function fmtMs(ms) { return ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(2) + 's'; }
-  function logLine(text) {
-    var s = $('summary');
-    s.innerHTML = s.innerHTML.replace(/<br>$/, '') + '<br>' + text;
-  }
-
-  /* ------------------------------------------------------------- checks */
-
-  var bag = {};
-
-  function checks() {
-    return [
-      { path: 'meta.json',
-        note: function (j) { bag.meta = j; return (j.sources || []).join(' · ') + ' — ' + (j.generatedAt || '?'); } },
-      { path: 'state.json',
-        note: function (j) {
-          bag.state = j;
-          return Object.keys(j).filter(function (k) { return j[k] && j[k].updatedAt; }).join(' · ');
-        } },
-
-      { path: 'gomunime/list/index.json',
-        note: function (j) { return j.count + ' judul / ' + j.chunks + ' chunk'; } },
-      { path: 'gomunime/list/000.json',
-        note: function (j) { bag.gmSeries = j[0]; return j.length + ' baris — ' + (j[0] ? j[0].title : '—'); } },
-      { path: function () { return bag.gmSeries ? 'gomunime/series/' + bucketOf(bag.gmSeries.id) + '.json' : null; },
-        note: function (j) {
-          var rec = bag.gmSeries ? j[bag.gmSeries.id] : null;
-          bag.gmPoster = rec && (rec.poster || rec.cover);
-          return rec ? (rec.players || []).length + ' player · ' + ((rec.episodes || []).length || rec.totalEpisodes || '?') + ' episode · rating ' + (rec.rating || '—') : 'id tidak ada di bucket';
-        } },
-      { path: 'gomunime/episodes/list/index.json',
-        note: function (j) { return j.count + ' episode'; } },
-      { path: 'gomunime/episodes/list/000.json',
-        note: function (j) { bag.gmEp = j[0]; return j[0] ? j[0].slug : 'kosong'; } },
-      { path: function () { return bag.gmEp ? 'gomunime/episodes/' + bucketOf(bag.gmEp.slug) + '.json' : null; },
-        note: function (j) {
-          var rec = bag.gmEp ? j[bag.gmEp.slug] : null;
-          return rec ? (rec.players || []).length + ' server · ' + (rec.series || '') : 'episode tidak ada di bucket';
-        } },
-
-      { path: 'samehadaku/anime/list/index.json',
-        note: function (j) { return j.count + ' anime / ' + j.chunks + ' chunk'; } },
-      { path: 'samehadaku/anime/list/000.json',
-        note: function (j) { bag.shAnime = j[0]; return j[0] ? j[0].title : 'kosong'; } },
-      { path: function () { return bag.shAnime ? 'samehadaku/anime/' + bucketOf(bag.shAnime.slug) + '.json' : null; },
-        note: function (j) {
-          var rec = bag.shAnime ? j[bag.shAnime.slug] : null;
-          bag.shPoster = rec && rec.poster;
-          return rec ? ((rec.genres || []).length + ' genre · season ' + ((rec.season || []).join(',') || '—')) : 'anime tidak ada di bucket';
-        } },
-      { path: 'samehadaku/taxonomy.json',
-        note: function (j) { return Object.keys(j.genre || {}).length + ' genre · ' + Object.keys(j.studio || {}).length + ' studio'; } },
-      { path: 'samehadaku/episodes/list/000.json',
-        note: function (j) { bag.shEp = j[0]; return j.length + ' episode — ' + (j[0] ? j[0].title : '—'); } },
-      { path: function () { return bag.shEp ? 'samehadaku/episodes/' + bucketOf(bag.shEp.slug) + '.json' : null; },
-        note: function (j) {
-          var rec = bag.shEp ? j[bag.shEp.slug] : null;
-          if (rec && rec.seriesUrl) bag.shSeriesSlug = rec.seriesUrl.replace(/\/+$/, '').split('/').pop();
-          return rec ? ((rec.servers || []).length + ' server · ' + (rec.seriesTitle || '—')) : 'episode tidak ada di bucket';
-        } },
-      { path: function () { return bag.shSeriesSlug ? 'samehadaku/series/' + bucketOf(bag.shSeriesSlug) + '.json' : null; },
-        skipNote: 'seriesUrl null',
-        note: function (j) {
-          var rec = bag.shSeriesSlug ? j[bag.shSeriesSlug] : null;
-          return rec ? ((rec.episodes || []).length + ' episode terindeks · ' + rec.title) : 'seri tidak ada di bucket';
-        } },
-
-      { path: 'mangadex/index.json',
-        note: function (j) { return j.items + ' judul · ' + j.chaptersBaked + ' chapter matang'; } },
-      { path: 'mangadex/list/manga/index.json',
-        note: function (j) { return j.count + ' manga'; } },
-      { path: 'mangadex/list/manga/000.json',
-        note: function (j) { bag.mdxItem = j[0]; return j[0] ? j[0].title : 'kosong'; } },
-      { path: function () { return bag.mdxItem ? 'mangadex/items/' + bucketOf(bag.mdxItem.id) + '.json' : null; },
-        note: function (j) {
-          var rec = bag.mdxItem ? j[bag.mdxItem.id] : null;
-          if (rec) { bag.mdxCover = rec.poster; bag.mdxCh = (rec.chapters || [])[0]; }
-          return rec ? ((rec.chapters || []).length + ' chapter · follows ' + (rec.follows || '—')) : 'judul tidak ada di bucket';
-        } },
-      { path: function () { return bag.mdxCh ? 'mangadex/chapters/' + bucketOf(bag.mdxCh.id) + '.json' : null; },
-        skipNote: 'belum ada chapter matang',
-        note: function (j) {
-          var rec = bag.mdxCh ? j[bag.mdxCh.id] : null;
-          return rec ? ((rec.pages || []).length + ' halaman siap baca · ch ' + (rec.number || '?')) : 'chapter tidak ada di bucket';
-        } },
-      { path: 'mangadex/list/manhwa/index.json',
-        note: function (j) { return j.count + ' manhwa'; } },
-      { path: 'mangadex/list/manhwa/000.json',
-        note: function (j) { return j.length + ' baris — ' + (j[0] ? j[0].title : '—'); } },
-
-      { path: 'nhentai/list/index.json',
-        note: function (j) { return j.count + ' doujin'; } },
-      { path: 'nhentai/list/000.json',
-        note: function (j) { bag.nhItem = j[0]; return j[0] ? j[0].title : 'kosong'; } },
-      { path: function () { return bag.nhItem ? 'nhentai/items/' + bucketOf(bag.nhItem.id) + '.json' : null; },
-        note: function (j) {
-          var rec = bag.nhItem ? j[bag.nhItem.id] : null;
-          if (rec) { bag.nhCover = rec.thumbnail || rec.cover; bag.nhPages = (rec.pages || []).length; }
-          return rec ? (bag.nhPages + ' halaman · ' + ((rec.tags || []).length) + ' tag') : 'gallery tidak ada di bucket';
-        } }
-    ];
-  }
-
-  /* ------------------------------------------------------------- render */
-
-  var state = { running: false, results: [], selected: null };
-
-  function buildStrip(count) {
-    var strip = $('strip');
-    strip.innerHTML = '';
-    for (var i = 0; i < count; i += 1) {
-      var seg = document.createElement('div');
-      seg.className = 'seg';
-      strip.appendChild(seg);
-    }
-  }
-
-  function rowHtml() {
-    var rows = $('rows');
-    var maxMs = state.results.reduce(function (m, r) { return r.ms && r.ms > m ? r.ms : m; }, 1);
-    rows.innerHTML = state.results.map(function (r, i) {
-      var cls = r.skip ? 'appendix' : (r.error || !(r.status >= 200 && r.status < 300) ? 'fail' : 'ok');
-      var codeCell = r.skip
-        ? '<span class="code">—</span>'
-        : r.error
-          ? '<span class="code fail">ERR</span>'
-          : '<span class="code ' + cls + '">' + r.status + '</span>';
-      var barPct = r.ms ? Math.max(2, Math.round((r.ms / maxMs) * 100)) : 0;
-      return '<div class="row" data-i="' + i + '" role="button" tabindex="0">' +
-        codeCell +
-        '<span class="path">' + escapeHtml(r.path) + '</span>' +
-        '<span class="num">' + (r.ms == null ? '—' : fmtMs(r.ms)) + '</span>' +
-        '<span class="num">' + (r.bytes == null ? '—' : fmtBytes(r.bytes)) + '</span>' +
-        '<span class="bar"><i style="width:' + barPct + '%"></i></span>' +
-        '<span class="note">' + escapeHtml(r.error || r.note || '') + '</span>' +
-        '</div>';
-    }).join('');
-  }
-
-  function escapeHtml(s) {
+  function fmtMs(ms) { return ms < 1000 ? ms + ' ms' : (ms / 1000).toFixed(2) + ' s'; }
+  function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
 
-  function select(i) {
-    state.selected = i;
-    var r = state.results[i];
-    Array.prototype.forEach.call(document.querySelectorAll('.row'), function (el) {
-      el.setAttribute('aria-selected', String(Number(el.dataset.i) === i));
-    });
-    var out = $('inspector');
-    if (!r) { out.textContent = 'pilih satu baris endpoint.'; return; }
-    if (r.skip) { out.textContent = 'DILEWATI  ' + r.path + '\n\n' + (r.note || ''); return; }
-    var head = (r.error ? 'ERROR  ' : r.status + '  ') + r.path + '  (' + fmtBytes(r.bytes || 0) + ', ' + fmtMs(r.ms || 0) + ')';
-    out.textContent = head + '\n\n' + (r.body == null ? '(tidak ada body)' : r.pretty || '');
+  /* ----------------------------------------------------- titik uji */
+  var bag = {};
+
+  function checks() {
+    return [
+      { path: 'meta.json',
+        note: function (j) { return 'sumber: ' + (j.sources || []).join(' + ') + ' — dibangun ' + (j.generatedAt || '?'); } },
+      { path: 'state.json',
+        note: function (j) {
+          var fresh = Object.keys(j).filter(function (k) { return j[k] && j[k].updatedAt; });
+          return 'catatan per sumber: ' + fresh.join(', ');
+        } },
+
+      { path: 'gomunime/list/index.json',
+        note: function (j) { return j.count + ' judul dalam ' + j.chunks + ' chunk'; } },
+      { path: 'gomunime/list/000.json',
+        note: function (j) { bag.gm = j[0]; return 'chunk 0: ' + j.length + ' baris — pertama “' + (j[0] ? j[0].title : '—') + '”'; } },
+      { path: function () { return bag.gm ? 'gomunime/series/' + bucketOf(bag.gm.id) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.gm ? j[bag.gm.id] : null;
+          bag.gmPoster = rec && (rec.poster || rec.cover);
+          return rec
+            ? ((rec.players || []).length + ' server di episode terakhir · ' + (rec.episodes || []).length + ' episode · rating ' + (rec.rating || '—'))
+            : 'id episode tidak ada di bucket ini';
+        } },
+      { path: 'gomunime/episodes/list/index.json',
+        note: function (j) { return j.count + ' episode terindeks'; } },
+      { path: 'gomunime/episodes/list/000.json',
+        note: function (j) { bag.gmEp = j[0]; return j[0] ? 'terbaru: ' + j[0].title : 'chunk kosong'; } },
+      { path: function () { return bag.gmEp ? 'gomunime/episodes/' + bucketOf(bag.gmEp.slug) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.gmEp ? j[bag.gmEp.slug] : null;
+          return rec ? ((rec.players || []).length + ' player · ' + (rec.series || '')) : 'episode tidak ada di bucket ini';
+        } },
+
+      { path: 'samehadaku/anime/list/index.json',
+        note: function (j) { return j.count + ' anime dalam ' + j.chunks + ' chunk'; } },
+      { path: 'samehadaku/anime/list/000.json',
+        note: function (j) { bag.sh = j[0]; return 'pertama “' + (j[0] ? j[0].title : '—') + '”'; } },
+      { path: function () { return bag.sh ? 'samehadaku/anime/' + bucketOf(bag.sh.slug) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.sh ? j[bag.sh.slug] : null;
+          bag.shPoster = rec && rec.poster;
+          return rec ? ((rec.genres || []).length + ' genre · ' + (rec.episode_count || '?') + ' episode · skor ' + (rec.score || '—')) : 'slug tidak ada di bucket ini';
+        } },
+      { path: 'samehadaku/taxonomy.json',
+        note: function (j) { return Object.keys(j.genre || {}).length + ' genre · ' + Object.keys(j.season || {}).length + ' season · ' + Object.keys(j.studio || {}).length + ' studio'; } },
+      { path: 'samehadaku/episodes/list/000.json',
+        note: function (j) { bag.shEp = j[0]; return j.length + ' episode di chunk 0'; } },
+      { path: function () { return bag.shEp ? 'samehadaku/episodes/' + bucketOf(bag.shEp.slug) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.shEp ? j[bag.shEp.slug] : null;
+          if (rec && rec.seriesUrl) bag.shSeri = rec.seriesUrl.replace(/\/+$/, '').split('/').pop();
+          return rec ? ((rec.servers || []).length + ' server embed · ' + (rec.seriesTitle || '—')) : 'episode tidak ada di bucket ini';
+        } },
+      { path: function () { return bag.shSeri ? 'samehadaku/series/' + bucketOf(bag.shSeri) + '.json' : null; },
+        skipNote: 'episode contoh belum punya seriesUrl — tunggu scrape berikutnya',
+        note: function (j) {
+          var rec = bag.shSeri ? j[bag.shSeri] : null;
+          return rec ? ((rec.episodes || []).length + ' episode terindeks untuk seri ini') : 'seri tidak ada di bucket ini';
+        } },
+
+      { path: 'mangadex/index.json',
+        note: function (j) { return j.items + ' judul dilacak · ' + j.chaptersBaked + ' chapter siap baca'; } },
+      { path: 'mangadex/list/manga/index.json',
+        note: function (j) { return j.count + ' manga'; } },
+      { path: 'mangadex/list/manga/000.json',
+        note: function (j) { bag.mdx = j[0]; return 'peringkat 1: “' + (j[0] ? j[0].title : '—') + '”'; } },
+      { path: function () { return bag.mdx ? 'mangadex/items/' + bucketOf(bag.mdx.id) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.mdx ? j[bag.mdx.id] : null;
+          if (rec) { bag.mdxPoster = rec.poster; bag.mdxCh = (rec.chapters || [])[0]; }
+          return rec ? ((rec.chapters || []).length + ' chapter terdaftar · ' + (rec.follows || 0) + ' pengikut') : 'judul tidak ada di bucket ini';
+        } },
+      { path: function () { return bag.mdxCh ? 'mangadex/chapters/' + bucketOf(bag.mdxCh.id) + '.json' : null; },
+        skipNote: 'judul contoh belum punya chapter tergiling — budget halaman habis di run terakhir',
+        note: function (j) {
+          var rec = bag.mdxCh ? j[bag.mdxCh.id] : null;
+          return rec ? ((rec.pages || []).length + ' halaman siap baca · ch ' + (rec.number || '?')) : 'chapter tidak ada di bucket ini';
+        } },
+      { path: 'mangadex/list/manhwa/index.json',
+        note: function (j) { return j.count + ' manhwa'; } },
+      { path: 'mangadex/list/manhwa/000.json',
+        note: function (j) { return j.length + ' baris — teratas “' + (j[0] ? j[0].title : '—') + '”'; } },
+
+      { path: 'nhentai/list/index.json',
+        note: function (j) { return j.count + ' doujin'; } },
+      { path: 'nhentai/list/000.json',
+        note: function (j) { bag.nh = j[0]; return 'favorit teratas: “' + (j[0] ? j[0].title : '—') + '”'; } },
+      { path: function () { return bag.nh ? 'nhentai/items/' + bucketOf(bag.nh.id) + '.json' : null; },
+        note: function (j) {
+          var rec = bag.nh ? j[bag.nh.id] : null;
+          if (rec) bag.nhPoster = rec.thumbnail || rec.cover;
+          return rec ? ((rec.pages || []).length + ' halaman · ' + (rec.numPages || '?') + ' total') : 'gallery tidak ada di bucket ini';
+        } }
+    ];
   }
 
-  /* ------------------------------------------------------------- run */
+  /* ----------------------------------------------------- render */
+  var state = { running: false, results: [], selected: null };
 
+  function renderTickets() {
+    var wrap = $('rows');
+    var maxMs = state.results.reduce(function (m, r) { return r.ms > m ? r.ms : m; }, 1);
+    wrap.innerHTML = state.results.map(function (r, i) {
+      var cls = r.skip ? 'is-skip' : (r.error || !(r.status >= 200 && r.status < 300) ? 'is-fail' : 'is-ok');
+      var codeCell = r.skip
+        ? '<span class="code">—</span>'
+        : r.error
+          ? '<span class="code fail">ERR</span>'
+          : '<span class="code ' + (cls === 'is-ok' ? 'ok' : 'fail') + '">' + r.status + '</span>';
+      var bar = r.ms ? '<span class="bar"><i style="width:' + Math.max(3, Math.round((r.ms / maxMs) * 100)) + '%"></i></span>' : '<span class="bar"></span>';
+      return '<div class="ticket ' + cls + '" data-i="' + i + '" role="button" tabindex="0" aria-selected="false">' +
+        '<span class="no">' + String(i + 1).padStart(2, '0') + '</span>' +
+        '<span class="path">' + esc(r.path) + '</span>' +
+        codeCell +
+        '<span class="num">' + (r.ms == null ? '—' : fmtMs(r.ms)) + '</span>' +
+        '<span class="num">' + (r.bytes == null ? '—' : fmtBytes(r.bytes)) + '</span>' +
+        bar +
+        '<span class="note">' + esc(r.error || r.note || '') + '</span>' +
+        '</div>';
+    }).join('');
+    Array.prototype.forEach.call(wrap.children, function (el) {
+      el.setAttribute('aria-selected', String(Number(el.dataset.i) === state.selected));
+    });
+  }
+
+  function renderStamp() {
+    var ok = state.results.filter(function (r) { return !r.skip && !r.error && r.status >= 200 && r.status < 300; }).length;
+    var fail = state.results.filter(function (r) { return !r.skip && (r.error || !(r.status >= 200 && r.status < 300)); }).length;
+    var skip = state.results.filter(function (r) { return r.skip; }).length;
+    var stamp = $('stamp');
+    if (!state.results.length) { stamp.textContent = 'belum dijalankan'; return; }
+    stamp.textContent = ok + ' lolos · ' + fail + ' gagal' + (skip ? ' · ' + skip + ' dilewati' : '');
+    stamp.className = 'stamp' + (fail ? ' has-fail' : '');
+  }
+
+  function select(i) {
+    if (i !== state.selected && typeof i === 'number' && !Number.isNaN(i)) state.selected = i;
+    var r = state.results[state.selected];
+    var out = $('inspector');
+    if (r) {
+      if (r.skip) { out.textContent = 'DILEWATI\n\n' + r.path + '\n' + (r.note || ''); return; }
+      var head = (r.error ? 'GAGAL  ' : r.status + '  ') + r.path + '   (' + fmtBytes(r.bytes || 0) + ', ' + fmtMs(r.ms || 0) + ')';
+      out.textContent = head + '\n\n' + (r.body == null ? '(tidak ada body)' : (r.pretty || ''));
+    } else {
+      out.textContent = 'pilih satu baris titik uji.';
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('.ticket'), function (el) {
+      el.setAttribute('aria-selected', String(Number(el.dataset.i) === state.selected));
+    });
+  }
+
+  /* ----------------------------------------------------- run */
   async function runAll() {
     if (state.running) return;
     state.running = true;
@@ -447,16 +469,22 @@ footer { margin-top: var(--space-2xl); color: var(--ink-3); font-size: var(--ste
     baseInput.value = base;
     var list = checks();
     state.results = [];
-    buildStrip(list.length);
-    rowHtml();
-    $('summary').textContent = 'jalan…';
-    $('media').innerHTML = '';
+    state.selected = null;
+    var strip = $('strip');
+    strip.innerHTML = '';
+    for (var s = 0; s < list.length; s += 1) {
+      var seg = document.createElement('span');
+      seg.className = 'seg';
+      strip.appendChild(seg);
+    }
+    renderTickets();
+    renderStamp();
+    $('prints').innerHTML = '';
     var runBtn = $('run');
     runBtn.disabled = true;
-    runBtn.setAttribute('aria-busy', 'true');
-    runBtn.textContent = 'jalan…';
+    runBtn.textContent = 'menembak…';
 
-    var segs = document.querySelectorAll('.seg');
+    var segs = strip.children;
     var t0 = performance.now();
 
     for (var i = 0; i < list.length; i += 1) {
@@ -466,7 +494,7 @@ footer { margin-top: var(--space-2xl); color: var(--ink-3); font-size: var(--ste
       if (!path) {
         segs[i].className = 'seg skip';
         state.results.push({ path: '(dilewati)', skip: true, ms: null, bytes: null, note: item.skipNote || 'tidak ada dependensi', body: null });
-        rowHtml();
+        renderTickets();
         continue;
       }
       var t = performance.now();
@@ -481,7 +509,7 @@ footer { margin-top: var(--space-2xl); color: var(--ink-3); font-size: var(--ste
         var json = JSON.parse(text);
         result.body = json;
         result.pretty = JSON.stringify(json, null, 2);
-        if (result.pretty.length > 120000) result.pretty = result.pretty.slice(0, 120000) + '\n… (dipotong)';
+        if (result.pretty.length > 120000) result.pretty = result.pretty.slice(0, 120000) + '\n… (dipotong di 120 KB — buka url-nya untuk utuh)';
         result.note = item.note ? item.note(json) : 'ok';
         segs[i].className = 'seg ok';
       } catch (err) {
@@ -492,53 +520,49 @@ footer { margin-top: var(--space-2xl); color: var(--ink-3); font-size: var(--ste
         segs[i].className = 'seg fail';
       }
       state.results.push(result);
-      rowHtml();
-      logLine('<b>' + (result.error ? 'fail' : result.status) + '</b> ' + escapeHtml(path));
+      renderTickets();
+      renderStamp();
     }
 
-    rowHtml();
-    renderMedia();
-    var ok = state.results.filter(function (r) { return !r.skip && !r.error && r.status >= 200 && r.status < 300; }).length;
-    var fail = state.results.filter(function (r) { return !r.skip && (r.error || !(r.status >= 200 && r.status < 300)); }).length;
-    var skipped = state.results.filter(function (r) { return r.skip; }).length;
-    $('summary').innerHTML = 'selesai dalam ' + fmtMs(Math.round(performance.now() - t0)) +
-      ' — <b>' + ok + ' ok</b>' + (fail ? ' · <b>' + fail + ' gagal</b>' : '') + (skipped ? ' · ' + skipped + ' dilewati' : '');
+    renderPrints();
+    renderStamp();
+    var dur = Math.round(performance.now() - t0);
+    $('hint').textContent = 'selesai dalam ' + fmtMs(dur) + ' — basis ' + base + ' — klik baris untuk inspeksi.';
     runBtn.disabled = false;
-    runBtn.removeAttribute('aria-busy');
-    runBtn.textContent = 'jalankan semua';
+    runBtn.textContent = 'jalankan lagi';
     state.running = false;
   }
 
-  function renderMedia() {
+  function renderPrints() {
     var picks = [];
-    if (bag.gmPoster) picks.push({ label: 'gomunime poster', src: bag.gmPoster });
-    if (bag.shPoster) picks.push({ label: 'samehadaku poster', src: bag.shPoster });
-    if (bag.mdxCover) picks.push({ label: 'mangadex cover', src: bag.mdxCover });
-    if (bag.nhCover) picks.push({ label: 'nhentai thumb', src: bag.nhCover });
-    var wrap = $('media');
-    if (!picks.length) { wrap.innerHTML = '<p class="hint">tidak ada gambar ditemukan — jalankan dulu.</p>'; return; }
-    wrap.innerHTML = picks.map(function (p, i) {
-      return '<figure class="thumb">' +
-        '<img src="' + escapeHtml(p.src) + '" alt="" referrerpolicy="no-referrer" loading="lazy" data-i="' + i + '">' +
-        '<figcaption>' + escapeHtml(p.label) + '<span class="state">memuat…</span></figcaption>' +
+    if (bag.gmPoster) picks.push({ label: 'gomunime', src: bag.gmPoster });
+    if (bag.shPoster) picks.push({ label: 'samehadaku', src: bag.shPoster });
+    if (bag.mdxPoster) picks.push({ label: 'mangadex', src: bag.mdxPoster });
+    if (bag.nhPoster) picks.push({ label: 'nhentai', src: bag.nhPoster });
+    var wrap = $('prints');
+    if (!picks.length) { wrap.innerHTML = '<p class="section-note">belum ada gambar — jalankan dulu uji katalog.</p>'; return; }
+    wrap.innerHTML = picks.map(function (p) {
+      return '<figure class="print">' +
+        '<img src="' + esc(p.src) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' +
+        '<figcaption>' + esc(p.label) + '<span class="state">mencetak…</span></figcaption>' +
         '</figure>';
     }).join('');
     Array.prototype.forEach.call(wrap.querySelectorAll('img'), function (img) {
+      var stateEl = img.parentElement.querySelector('.state');
       img.addEventListener('load', function () {
-        img.parentElement.querySelector('.state').textContent = 'hotlink ok · ' + img.naturalWidth + '×' + img.naturalHeight;
-        img.parentElement.querySelector('.state').className = 'state ok';
+        stateEl.textContent = 'hotlink jalan · ' + img.naturalWidth + '×' + img.naturalHeight;
+        stateEl.className = 'state ok';
       });
       img.addEventListener('error', function () {
-        img.parentElement.querySelector('.state').textContent = 'gagal dimuat (403 / referer)';
-        img.parentElement.querySelector('.state').className = 'state fail';
+        stateEl.textContent = 'gagal dimuat — host menolak hotlink';
+        stateEl.className = 'state fail';
       });
     });
   }
 
-  /* ------------------------------------------------------------- wire */
-
+  /* ----------------------------------------------------- wire */
+  $('run').addEventListener('click', runAll);
   baseInput.addEventListener('change', runAll);
-
   $('presets').addEventListener('click', function (e) {
     var btn = e.target.closest('button[data-url]');
     if (!btn) return;
@@ -548,42 +572,33 @@ footer { margin-top: var(--space-2xl); color: var(--ink-3); font-size: var(--ste
     });
     runAll();
   });
-
-  $('run').addEventListener('click', runAll);
-
   $('rows').addEventListener('click', function (e) {
-    var row = e.target.closest('.row');
+    var row = e.target.closest('.ticket');
     if (row) select(Number(row.dataset.i));
   });
   $('rows').addEventListener('keydown', function (e) {
     if (e.key !== 'Enter' && e.key !== ' ') return;
-    var row = e.target.closest('.row');
+    var row = e.target.closest('.ticket');
     if (row) { e.preventDefault(); select(Number(row.dataset.i)); }
   });
-
   $('copy-json').addEventListener('click', function () {
     var r = state.results[state.selected];
     if (r && r.pretty) navigator.clipboard.writeText(r.pretty);
   });
   $('copy-curl').addEventListener('click', function () {
     var r = state.results[state.selected];
-    if (r) navigator.clipboard.writeText('curl -sL "' + normalizeBase(baseInput.value) + r.path + '"');
+    if (r && r.path) navigator.clipboard.writeText('curl -sL "' + normalizeBase(baseInput.value) + r.path + '"');
   });
   $('clear-inspect').addEventListener('click', function () {
-    $('inspector').textContent = 'pilih satu baris endpoint.';
-    Array.prototype.forEach.call(document.querySelectorAll('.row'), function (el) { el.setAttribute('aria-selected', 'false'); });
+    state.selected = null;
+    select(null);
   });
 
-  /* default base: repo root keeps data/ next to web/ */
-  if (location.pathname.endsWith('/web/test.html') || location.pathname.endsWith('/web/')) {
+  $('origin').textContent = location.host || 'file://';
+  $('clock').textContent = 'refresh terakhir: lihat data/meta.json';
+  if (location.pathname.endsWith('/web/test.html') || location.pathname.endsWith('/web/') || location.protocol === 'file:') {
     baseInput.value = '../data/';
-  } else if (location.protocol === 'file:') {
-    baseInput.value = '../data/';
-  } else {
-    baseInput.value = './data/';
   }
-  $('origin-hint').textContent = 'origin: ' + location.origin + location.pathname + ' — fetch anonim, tanpa kredensial.';
-
   runAll();
 }());
 </script>
