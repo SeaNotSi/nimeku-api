@@ -305,11 +305,11 @@ async function renderHome() {
   setActiveTab('');
   content.innerHTML = loaderHtml();
   const [gomuEps, sameEps, mangaList, manhwaList, doujinList] = await Promise.all([
-    getList('gomunime-episodes', 'gomunime/episodes/list').then((l) => l.more(1)).catch(() => []),
-    getList('samehadaku-episodes', 'samehadaku/episodes/list').then((l) => l.more(1)).catch(() => []),
-    getList('mangadex-manga', 'mangadex/list/manga').then((l) => l.more(2)).catch(() => []),
-    getList('mangadex-manhwa', 'mangadex/list/manhwa').then((l) => l.more(2)).catch(() => []),
-    getList('nhentai', 'nhentai/list').then((l) => l.more(1)).catch(() => []),
+    getList('gomunime-episodes', 'gomunime/episodes/list').more(1).catch(() => []),
+    getList('samehadaku-episodes', 'samehadaku/episodes/list').more(1).catch(() => []),
+    getList('mangadex-manga', 'mangadex/list/manga').more(2).catch(() => []),
+    getList('mangadex-manhwa', 'mangadex/list/manhwa').more(2).catch(() => []),
+    getList('nhentai', 'nhentai/list').more(1).catch(() => []),
   ]);
 
   const latest = [
