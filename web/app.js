@@ -318,6 +318,11 @@ async function renderHome() {
   ].sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))).slice(0, 12);
 
   content.innerHTML = `
+    <section class="hero">
+      <p class="kicker">katalog anime · manga · manhwa · doujin</p>
+      <h1>Baca &amp; nonton, <span>langsung</span> dari API statis.</h1>
+      <p class="lede">Data di-scrape terjadwal tiap 6 jam, disajikan sebagai JSON statis dan halaman tanpa build step. Empat sumber, satu meja.</p>
+    </section>
     ${latest.length ? `
       ${section('Episode terbaru', 'gomunime + samehadaku')}
       <div class="grid">${latest.map((ep) => card({
@@ -469,7 +474,7 @@ async function renderGomunimeWatch(slug) {
     <div class="breadcrumbs muted">
       <a href="#/anime">Anime</a> › ${series ? `<a href="#/series/gomunime/${series.slug}">${esc(series.title)}</a> ›` : ''} <span>Episode ${esc(ep.episode ?? '')}</span>
     </div>
-    <h1 style="margin:10px 0 4px;font-size:clamp(18px,2.6vw,26px)">${esc(ep.title)}</h1>
+    <h1 class="watch-title">${esc(ep.title)}</h1>
     <p class="muted" style="margin:0 0 6px">${esc(ep.series || '')} ${ep.rating ? `· ★ ${esc(ep.rating)}` : ''} ${ep.published ? `· ${esc(fmtDate(ep.published))}` : ''}</p>
     ${playerBlock(players, ep)}
     <div class="row" style="justify-content:space-between;border:0;background:transparent;padding:8px 0">
@@ -479,7 +484,7 @@ async function renderGomunimeWatch(slug) {
     ${series ? `
       ${section(`Episode lain — ${series.title}`, '')}
       <div class="list">${episodes.slice().reverse().map((item) => `
-        <a class="row" href="#/watch/gomunime/${item.slug}" ${item.slug === slug ? 'style="border-color:var(--accent)"' : ''}>
+        <a class="row${item.slug === slug ? ' is-current' : ''}" href="#/watch/gomunime/${item.slug}">
           <span class="num">Ep ${esc(item.number)}</span>
           <span class="grow">${esc(series.title)} Episode ${esc(item.number)}</span>
         </a>`).join('')}</div>` : ''}`;
@@ -517,7 +522,7 @@ async function renderSamehadakuWatch(slug) {
       <a href="#/anime?src=samehadaku">Anime</a> › ${series ? `<a href="#/series/samehadaku/${series.slug}">${esc(series.title)}</a> ›` : ''}
       <span>${esc(ep.title)}</span>
     </div>
-    <h1 style="margin:10px 0 4px;font-size:clamp(18px,2.6vw,26px)">${esc(ep.title)}</h1>
+    <h1 class="watch-title">${esc(ep.title)}</h1>
     <p class="muted" style="margin:0 0 6px">${esc(ep.seriesTitle || '')} ${ep.published ? `· ${esc(fmtDate(ep.published))}` : ''} ${servers.length ? `· ${servers.length} server` : ''}</p>
     ${servers.length ? playerBlock(servers.map((s) => ({ label: s.server, kind: 'iframe', embed: s.embedUrl })), ep) : errorHtml('Server belum ke-scrape untuk episode ini.')}
     <div class="row" style="justify-content:space-between;border:0;background:transparent;padding:8px 0">
@@ -534,7 +539,7 @@ async function renderSamehadakuWatch(slug) {
     ${series ? `
       ${section(`Episode lain — ${series.title}`, '')}
       <div class="list">${episodes.slice().reverse().map((item) => `
-        <a class="row" href="#/watch/samehadaku/${item.slug}" ${item.slug === slug ? 'style="border-color:var(--accent)"' : ''}>
+        <a class="row${item.slug === slug ? ' is-current' : ''}" href="#/watch/samehadaku/${item.slug}">
           <span class="grow">${esc(item.title)}</span>
           <span class="chip">${esc(fmtDate(item.published))}</span>
         </a>`).join('')}</div>` : ''}`;
