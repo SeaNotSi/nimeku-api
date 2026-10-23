@@ -49,6 +49,29 @@ data/
 
 Contoh: list manga populer → `data/mangadex/list/manga/000.json`, detail → `data/mangadex/items/<bucket>.json`.
 
+### Endpoint universal (privat)
+
+Satu file berisi seluruh katalog: anime (dua sumber + player/server), manga, manhwa, doujin, semua URL gambar, semua rating, dan jumlah chapter.
+
+```
+https://seanotsi.github.io/nimeku-api/data/api.enc.json
+https://cdn.jsdelivr.net/gh/SeaNotSi/nimeku-api@main/data/api.enc.json
+```
+
+Isinya ciphertext AES-256-GCM (gzip di dalam), jadi URL-nya boleh publik tapi tanpa passphrase tidak ada yang bisa dibaca. Passphrase ada di repo secret `NIMEKU_API_PASSPHRASE`; bundle dibangun ulang di akhir setiap scrape (butuh ~3 detik, ~5 MB terkompresi, ~6.6 MB setelah base64).
+
+Bentuk data setelah dibuka:
+
+```
+{
+  v, generatedAt, sources[], counts{anime, animeEpisodes, manga, manhwa, chapters, doujin, doujinPages, images},
+  meta: { state },
+  anime: { gomunime: [...], samehadaku: [...] },   // tiap item punya episodes[]
+  manga: [...], manhwa: [...], doujin: [...],
+  images: { posters: { "<prefix:id>": "<url>" } }
+}
+```
+
 ## Scraper
 
 ```
