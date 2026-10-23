@@ -31,7 +31,14 @@ for (const raw of process.argv.slice(2)) {
 
 const SOURCE = args.get('source') || 'all';
 const MODE = args.get('mode') || 'incremental';
-const LIMIT = Number(args.get('limit') || 0);
+// Workflow inputs arrive as strings and default to '0'; a plain || would keep
+// '0' (truthy) and clamp budgets to zero, silently disabling the whole pass.
+const numericArg = (key, fallback) => {
+  const value = Number(args.get(key));
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
+const LIMIT = numericArg('limit', 0);
 const OFFSET = Number(args.get('offset') || 0);
 const DRY = args.has('dry');
 
@@ -361,8 +368,8 @@ async function scrapeMangadex(state) {
   if (!DRY) await store.flush();
 
   // Chapter pass: newest titles first; feed refreshes weekly, pages fill by budget.
-  const chapterBudget = Number(args.get('pagebudget') || (MODE === 'full' ? 25000 : 800));
-  const perTitle = Number(args.get('chapters') || 40);
+  const chapterBudget = numericArg('pagebudget', MODE === 'full' ? 25000 : 800);
+  const perTitle = numericArg('chapters', 40);
   const titles = store
     .values()
     .sort((a, b) => (b.follows ?? 0) - (a.follows ?? 0));
@@ -438,7 +445,7 @@ async function scrapeMangadex(state) {
 
   // A manifest is ~1 KB and never goes stale, so the cap only guards against
   // runaway growth; eviction would silently un-bake chapters that are still listed.
-  const chapterCap = Number(args.get('chaptercap') || 60000);
+  const chapterCap = numericArg('chaptercap', 60000);
   if (chapterStore.size > chapterCap) {
     const doomed = chapterStore
       .values()
