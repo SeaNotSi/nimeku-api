@@ -4,7 +4,7 @@
  */
 
 import { absoluteUrl, decodeEntities, firstMatch, normSpace, stripTags } from './util.mjs';
-import { isXtwapPlayer, resolveXtwap, xtwapServerName } from './xtwap.mjs';
+import { isLegacyXtwap, isXtwapPlayer, probeXtwap, resolveXtwap, xtwapServerName } from './xtwap.mjs';
 
 export const GOMUNIME_ORIGIN = 'https://gomunime.top';
 
@@ -126,12 +126,23 @@ export class GomunimeClient {
     for (const embed of embeds) {
       if (isXtwapPlayer(embed)) {
         const resolved = await resolveXtwap(embed, this.http);
+        const alive = Boolean(resolved.hls || resolved.file) || (await probeXtwap(embed, this.http));
         players.push({
           label: xtwapServerName(embed),
           kind: resolved.hls ? 'hls' : resolved.file ? 'file' : 'iframe',
           embed,
           file: resolved.file || null,
           hls: resolved.hls || null,
+          live: alive === null ? null : Boolean(alive),
+        });
+      } else if (isLegacyXtwap(embed)) {
+        players.push({
+          label: hostLabel(embed),
+          kind: 'iframe',
+          embed,
+          file: null,
+          hls: null,
+          live: await probeXtwap(embed, this.http),
         });
       } else {
         players.push({ label: hostLabel(embed), kind: 'iframe', embed, file: null, hls: null });

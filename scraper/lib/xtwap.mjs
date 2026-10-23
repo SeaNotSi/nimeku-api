@@ -18,6 +18,16 @@ export function isXtwapPlayer(url) {
   return /play\.xtwap\.top\/(btube3|cepat2)\.php/i.test(String(url || ''));
 }
 
+/**
+ * The older gomunime embed points straight at xtwap.top/cepat.php. It is not
+ * resolvable (no direct source in the HTML) and its player page 404s once the
+ * upstream file is purged, but a minority still answer 200 and frame fine, so
+ * it gets probed instead of dropped.
+ */
+export function isLegacyXtwap(url) {
+  return /xtwap\.top\/cepat\.php/i.test(String(url || ''));
+}
+
 export function xtwapServerName(url) {
   if (/btube3/i.test(url)) return 'B-TUBE';
   if (/cepat2/i.test(url)) return 'CEPAT';
@@ -53,4 +63,21 @@ export async function resolveXtwap(playerUrl, http, { attempts = 3, delayMs = 70
     if (attempt < attempts - 1) await sleep(delayMs * (attempt + 1));
   }
   return { file: null, hls: null, lastBodyLength: lastBody.length };
+}
+
+/**
+ * Gomunime keeps advertising an xtwap embed after the upstream file is purged;
+ * the player page itself then answers 404. Dead embeds are filtered from the
+ * watch UI, while ambiguous failures (timeouts, 5xx) return null so a temporary
+ * origin hiccup never hides a working server.
+ */
+export async function probeXtwap(playerUrl, http) {
+  try {
+    await http.text(playerUrl);
+    return true;
+  } catch (error) {
+    const status = Number(error && error.status);
+    if (status === 404 || status === 410) return false;
+    return null;
+  }
 }

@@ -480,6 +480,18 @@ function samehadakuServers(servers) {
   return { playable, external, dead };
 }
 
+/**
+ * gomunime ordering: gdplayer is the only host verified to play from a
+ * third-party origin. A resolved HLS still mounts as an iframe because
+ * hls.xtwap.top pins Access-Control-Allow-Origin to play.xtwap.top, so hls.js
+ * cannot fetch it from github.io.
+ */
+function gomunimeRank(player) {
+  if (/gdplayer\.to/i.test(String(player.embed || ''))) return 0;
+  if (player.hls || player.kind === 'hls') return 1;
+  return 2;
+}
+
 async function renderGomunimeWatch(slug) {
   setActiveTab('anime');
   content.innerHTML = loaderHtml();
@@ -493,15 +505,20 @@ async function renderGomunimeWatch(slug) {
   const idx = episodes.findIndex((item) => item.slug === slug);
   const prev = idx > 0 ? episodes[idx - 1] : null;
   const next = idx >= 0 && idx < episodes.length - 1 ? episodes[idx + 1] : null;
-  const players = ep.players || [];
+  const allPlayers = ep.players || [];
+  const players = allPlayers
+    .filter((player) => player.live !== false)
+    .sort((a, b) => gomunimeRank(a) - gomunimeRank(b));
+  const deadPlayers = allPlayers.length - players.length;
 
   content.innerHTML = `
     <div class="breadcrumbs muted">
       <a href="#/anime">Anime</a> › ${series ? `<a href="#/series/gomunime/${series.slug}">${esc(series.title)}</a> ›` : ''} <span>Episode ${esc(ep.episode ?? '')}</span>
     </div>
     <h1 class="watch-title">${esc(ep.title)}</h1>
-    <p class="muted" style="margin:0 0 6px">${esc(ep.series || '')} ${ep.rating ? `· ★ ${esc(ep.rating)}` : ''} ${ep.published ? `· ${esc(fmtDate(ep.published))}` : ''}</p>
+    <p class="muted" style="margin:0 0 6px">${esc(ep.series || '')} ${ep.rating ? `· ★ ${esc(ep.rating)}` : ''} ${ep.published ? `· ${esc(fmtDate(ep.published))}` : ''} ${players.length ? `· ${players.length} server bisa diputar` : ''}</p>
     ${playerBlock(players, ep)}
+    ${deadPlayers ? `<p class="muted">${deadPlayers} server mati disembunyikan — berkasnya sudah dihapus di sumber.</p>` : ''}
     <div class="row" style="justify-content:space-between;border:0;background:transparent;padding:8px 0">
       ${prev ? `<a class="btn" href="#/watch/gomunime/${prev.slug}">‹ Episode ${esc(prev.number)}</a>` : '<span></span>'}
       ${next ? `<a class="btn primary" href="#/watch/gomunime/${next.slug}">Episode ${esc(next.number)} ›</a>` : '<span></span>'}
