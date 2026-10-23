@@ -1,0 +1,60 @@
+name: probe-athome
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: measure at-home throughput
+        run: |
+          node --input-type=module -e '
+          import { readdir, readFile } from "node:fs/promises";
+
+          const ids = [];
+          const files = await readdir("data/mangadex/items");
+          for (const f of files) {
+            if (!f.endsWith(".json")) continue;
+            const bucket = JSON.parse(await readFile("data/mangadex/items/" + f, "utf8"));
+            for (const item of Object.values(bucket)) {
+              for (const ch of item.chapters || []) if (!ch.baked) ids.push(ch.id);
+              if (ids.length > 400) break;
+            }
+            if (ids.length > 400) break;
+          }
+          console.log("pool", ids.length);
+
+          const get = async (id) => {
+            const started = Date.now();
+            const res = await fetch(`https://api.mangadex.org/at-home/server/${id}`);
+            await res.arrayBuffer();
+            return { ms: Date.now() - started, status: res.status };
+          };
+
+          const runPool = async (concurrency, sample) => {
+            const started = Date.now();
+            let cursor = 0, ok = 0, err = 0, rate429 = 0;
+            const workers = Array.from({ length: concurrency }, async () => {
+              while (cursor < sample.length) {
+                const id = sample[cursor++];
+                try {
+                  const r = await get(id);
+                  if (r.status === 200) ok++;
+                  else if (r.status === 429) rate429++;
+                  else err++;
+                } catch { err++; }
+              }
+            });
+            await Promise.all(workers);
+            const elapsed = (Date.now() - started) / 1000;
+            console.log(`concurrency=${concurrency} n=${sample.length} ok=${ok} err=${err} 429=${rate429} elapsed=${elapsed.toFixed(1)}s rate=${(sample.length / elapsed).toFixed(2)}/s`);
+          };
+
+          for (const c of [1, 4, 8, 16]) {
+            const sample = ids.slice(0, 60);
+            await runPool(c, sample);
+          }
+          '
