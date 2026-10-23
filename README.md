@@ -10,7 +10,7 @@ Hasil scrape di-commit otomatis ke repo ini dan disajikan lewat GitHub Pages.
 |---|---|---|
 | **gomunime.top** | series, episode, server streaming (xtwap B-TUBE/CEPAT, mp4upload, mega, dll) | stream xtwap di-resolve per scrape |
 | **v2.samehadaku.how** | katalog anime, episode, server embed via `player_ajax`, link download | REST WP + halaman episode |
-| **MangaDex** | manga (JP) & manhwa (KR), daftar chapter, halaman chapter | halaman di-cache, karena CORS MangaDex cuma buat mangadex.org |
+| **MangaDex** | manga (JP) & manhwa (KR), daftar chapter, halaman chapter | manifest halaman di-cache; chapter lain di-resolve live lewat mirror JSON |
 | **nhentai** | galeri doujin + halaman gambar | gambar bisa hotlink langsung |
 
 ## Struktur API
@@ -33,7 +33,7 @@ data/
   mangadex/
     list/manga/…, list/manhwa/…        # katalog
     items/<bucket>.json                # detail + chapter list (flag `baked`)
-    chapters/<bucket>.json             # halaman chapter (URL siap pakai)
+    chapters/<bucket>.json             # manifest chapter: {hash, files} → uploads.mangadex.org
     index.json
   nhentai/
     list/…, items/<bucket>.json        # katalog + detail + pages
@@ -83,11 +83,17 @@ Untuk samehadaku hanya embed Blogger yang bisa diputar dari origin lain: mega/wi
 
 - `#/anime` — gabungan katalog gomunime + samehadaku
 - `#/watch/...` — halaman nonton (ganti server, embed / video langsung)
-- `#/manga`, `#/manhwa` — katalog MangaDex, chapter yang sudah di-cache bisa dibaca
+- `#/manga`, `#/manhwa` — katalog MangaDex, semua chapter bisa dibaca (manifest cache atau resolve live)
 - `#/doujin` — katalog nhentai, baca langsung
 - pencarian judul per tab
 
 Deploy: otomatis via `pages.yml`, atau copy isi `web/` + folder `data/` ke hosting statis mana pun.
+
+### Cara chapter dibaca
+
+1. `chapters/<bucket>.json` menyimpan `{hash, files}` dari MangaDex@Home; `web/app.js` merangkai sendiri URL `https://uploads.mangadex.org/data/<hash>/<file>`.
+2. Kalau chapter belum punya manifest, reader memanggil `https://r.jina.ai/https://api.mangadex.org/at-home/server/<chapterId>` (MangaDex API tidak mengirim header CORS; mirror ini mengirim `data.content` berisi JSON yang sama) lalu menyimpannya di `localStorage`.
+3. `--pagebudget` mengatur berapa manifest baru yang diambil per run (default 800 incremental / 25000 full), urut judul paling populer, chapter terbaru dulu.
 
 ## Catatan
 

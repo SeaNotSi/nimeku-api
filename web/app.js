@@ -638,66 +638,155 @@ async function renderMangaDetail(lane, id) {
     </div>
     ${section('Daftar chapter', 'terbaru di atas')}
     <div class="list">
-      ${chapters.slice().reverse().map((ch) => ch.baked ? `
-        <a class="row" href="#/read/mangadex/${ch.id}">
+      ${chapters.slice().reverse().map((ch) => `
+        <a class="row" href="#/read/mangadex/${ch.id}"
+           data-chapter-id="${esc(ch.id)}"
+           data-manga-id="${esc(item.id)}"
+           data-manga-title="${esc(item.title)}"
+           data-lane="${esc(item.lane || 'manga')}"
+           data-chapter-number="${esc(ch.number ?? '')}">
           <span class="num">Ch ${esc(ch.number ?? '?')}</span>
           <span class="grow">${esc(ch.title || item.title)}</span>
-          <span class="chip">${esc(ch.lang)}</span>
-          <span class="chip">${esc(ch.pages)} hal</span>
-        </a>` : `
-        <div class="row soon">
-          <span class="num">Ch ${esc(ch.number ?? '?')}</span>
-          <span class="grow">${esc(ch.title || item.title)}</span>
-          <span class="chip">menyusul</span>
-        </div>`).join('') || errorHtml('Chapter belum ada di cache.')}
+          <span class="chip">${esc(ch.lang || '')}</span>
+          <span class="chip">${ch.baked ? `${esc(ch.pages)} hal` : 'live'}</span>
+        </a>`).join('') || errorHtml('Chapter belum ada di cache.')}
     </div>`;
 }
 
+/* ------------------------------------------------ mangadex reader */
+
+const ATHOME_MIRROR = 'https://r.jina.ai/';
+const ATHOME_ORIGIN = 'https://api.mangadex.org/at-home/server/';
+const UPLOADS_BASE = 'https://uploads.mangadex.org/data/';
+const MANIFEST_TTL = 7 * 24 * 3600 * 1000;
+
+function readChapterContext(chapterId) {
+  try {
+    const raw = sessionStorage.getItem(`nimeku:ctx:${chapterId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+// The item page knows the title and lane even when the chapter itself was never
+// baked, so the click carries that context into the reader route.
+document.addEventListener('click', (event) => {
+  const row = event.target.closest?.('a[data-chapter-id]');
+  if (!row) return;
+  try {
+    sessionStorage.setItem(`nimeku:ctx:${row.dataset.chapterId}`, JSON.stringify({
+      mangaId: row.dataset.mangaId,
+      mangaTitle: row.dataset.mangaTitle,
+      lane: row.dataset.lane,
+      number: row.dataset.chapterNumber,
+    }));
+  } catch {
+    /* private mode: the reader falls back to whatever the store has */
+  }
+});
+
+function cachedManifest(chapterId) {
+  try {
+    const raw = localStorage.getItem(`nimeku:manifest:${chapterId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed.hash || !Array.isArray(parsed.files) || !parsed.files.length) return null;
+    if (Date.now() - (parsed.at || 0) > MANIFEST_TTL) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function rememberManifest(chapterId, manifest) {
+  try {
+    localStorage.setItem(`nimeku:manifest:${chapterId}`, JSON.stringify({ ...manifest, at: Date.now() }));
+  } catch {
+    /* quota or private mode: the current view still renders */
+  }
+}
+
 /**
- * Chapter records carry either full page URLs (older bake) or a manifest of
- * { hash, files } taken from MangaDex@Home. The uploads CDN serves the same
- * files without a referer or CORS requirement, so the reader rebuilds them.
+ * The MangaDex API sends no Access-Control-Allow-Origin, so the browser cannot
+ * call at-home directly. r.jina.ai relays the same JSON, echoes the page origin,
+ * and wraps the body in { data: { content: "<json>" } }.
  */
+async function fetchManifest(chapterId) {
+  const cached = cachedManifest(chapterId);
+  if (cached) return cached;
+  const response = await fetch(`${ATHOME_MIRROR}${ATHOME_ORIGIN}${chapterId}`, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) throw new Error(`mirror HTTP ${response.status}`);
+  const envelope = await response.json();
+  const payload = JSON.parse(envelope?.data?.content || '{}');
+  const hash = payload?.chapter?.hash;
+  const files = payload?.chapter?.data || [];
+  if (!hash || !files.length) throw new Error('manifest kosong');
+  const manifest = { hash, files };
+  rememberManifest(chapterId, manifest);
+  return manifest;
+}
+
+function uploadsUrls(manifest) {
+  return manifest.files.map((file) => `${UPLOADS_BASE}${manifest.hash}/${file}`);
+}
+
 function chapterImageUrls(chapter) {
   if (Array.isArray(chapter.pages) && chapter.pages.length > 0) return chapter.pages;
   if (chapter.hash && Array.isArray(chapter.files) && chapter.files.length > 0) {
-    return chapter.files.map((file) => `https://uploads.mangadex.org/data/${chapter.hash}/${file}`);
+    return uploadsUrls(chapter);
   }
   return [];
 }
 
 async function renderMangaReader(chapterId) {
   content.innerHTML = loaderHtml();
-  const chapter = await bucketRecord('mangadex/chapters', chapterId);
-  if (!chapter) {
-    content.innerHTML = errorHtml('Chapter ini belum di-cache. Buka lagi setelah refresh berikutnya.');
-    return;
-  }
-  const images = chapterImageUrls(chapter);
-  if (!images.length) {
-    content.innerHTML = errorHtml('Daftar halaman chapter ini kosong di sumber.');
-    return;
-  }
-  const item = await bucketRecord('mangadex/items', chapter.mangaId);
-  const chapters = (item?.chapters || []).filter((ch) => ch.baked).slice().sort((a, b) => (parseFloat(a.number) || 0) - (parseFloat(b.number) || 0));
-  const idx = chapters.findIndex((ch) => ch.id === chapterId);
-  const prev = idx > 0 ? chapters[idx - 1] : null;
-  const next = idx >= 0 && idx < chapters.length - 1 ? chapters[idx + 1] : null;
+  const stored = await bucketRecord('mangadex/chapters', chapterId);
+  const context = readChapterContext(chapterId);
+  // A deep link carries no session context; the mirror still resolves the
+  // chapter's pages, so render what is known instead of refusing the route.
+  const chapter = stored
+    || (context ? { id: chapterId, ...context } : { id: chapterId, mangaId: null, mangaTitle: '', lane: 'manga', number: null });
+  const item = chapter.mangaId ? await bucketRecord('mangadex/items', chapter.mangaId) : null;
+  const siblings = (item?.chapters || []).slice()
+    .sort((a, b) => (parseFloat(a.number) || 0) - (parseFloat(b.number) || 0));
+  const idx = siblings.findIndex((ch) => ch.id === chapterId);
+  const prev = idx > 0 ? siblings[idx - 1] : null;
+  const next = idx >= 0 && idx < siblings.length - 1 ? siblings[idx + 1] : null;
+  const lane = chapter.lane || 'manga';
+
+  const crumbs = chapter.mangaId
+    ? `<div class="breadcrumbs muted">
+         <a href="#/${esc(lane)}">${esc(lane.toUpperCase())}</a> ›
+         <a href="#/manga/${esc(lane)}/${esc(chapter.mangaId)}">${esc(chapter.mangaTitle || '')}</a> ›
+         <span>Chapter ${esc(chapter.number ?? '')}</span>
+       </div>`
+    : `<div class="breadcrumbs muted"><span>Chapter ${esc(chapterId.slice(0, 8))}…</span></div>`;
 
   content.innerHTML = `
-    <div class="breadcrumbs muted">
-      <a href="#/${chapter.lane || 'manga'}">${esc((chapter.lane || 'manga').toUpperCase())}</a> ›
-      <a href="#/manga/${chapter.lane || 'manga'}/${chapter.mangaId}">${esc(chapter.mangaTitle || '')}</a> ›
-      <span>Chapter ${esc(chapter.number ?? '')}</span>
-    </div>
-    <div class="reader">
-      ${images.map((url, i) => `<img src="${esc(url)}" alt="halaman ${i + 1}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`).join('')}
-    </div>
-    <div class="reader-nav">
+    ${crumbs}
+    <div class="reader" id="reader-pages">${loaderHtml('menyiapkan halaman…')}</div>
+    ${chapter.mangaId ? `<div class="reader-nav">
       ${prev ? `<a href="#/read/mangadex/${prev.id}">‹ Ch ${esc(prev.number)}</a>` : '<span>‹ Ch —</span>'}
-      <a href="#/manga/${chapter.lane || 'manga'}/${chapter.mangaId}">Daftar chapter</a>
+      <a href="#/manga/${esc(lane)}/${esc(chapter.mangaId)}">Daftar chapter</a>
       ${next ? `<a href="#/read/mangadex/${next.id}">Ch ${esc(next.number)} ›</a>` : '<span>Ch — ›</span>'}
-    </div>`;
+    </div>` : ''}`;
+
+  const target = document.getElementById('reader-pages');
+  let images = stored ? chapterImageUrls(stored) : [];
+  if (!images.length) {
+    try {
+      images = uploadsUrls(await fetchManifest(chapterId));
+    } catch (err) {
+      target.innerHTML = `<div class="center error">Halaman gagal dimuat (${esc(err.message)}). <a href="https://mangadex.org/chapter/${esc(chapterId)}" target="_blank" rel="noreferrer">Buka di MangaDex</a></div>`;
+      return;
+    }
+  }
+  target.innerHTML = images
+    .map((url, index) => `<img src="${esc(url)}" alt="halaman ${index + 1}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`)
+    .join('');
 }
 
 /* --------------------------------------------------------- doujin detail */
