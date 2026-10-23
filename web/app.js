@@ -630,7 +630,7 @@ async function renderMangaDetail(lane, id) {
       <div>
         <h1>${esc(item.title)}</h1>
         ${item.altTitle ? `<p class="muted" style="margin:0 0 6px">${esc(item.altTitle)}</p>` : ''}
-        <div class="chips">${[item.status, item.year, item.rating ? `★ ${item.rating}` : null, item.follows ? `${item.follows} follow` : null, `${chapters.length} chapter di cache · ${baked} siap baca`]
+        <div class="chips">${[item.status, item.year, item.rating ? `★ ${item.rating}` : null, item.follows ? `${item.follows} follow` : null, `${chapters.length} chapter · ${baked} di cache${chapters.length - baked > 0 ? ` · ${chapters.length - baked} live` : ''}`]
           .filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>
         <div class="chips">${(item.tags || []).map((t) => `<a class="chip" href="#/${lane}?q=${encodeURIComponent(t)}">${esc(t)}</a>`).join('')}</div>
         <p class="synopsis">${esc(item.description || '')}</p>
