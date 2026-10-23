@@ -68,7 +68,14 @@ Khusus samehadaku transport-nya `curl` (Cloudflare menolak TLS fingerprint undic
 - `scrape.yml` — jalan tiap 6 jam + manual dispatch; commit otomatis ke `data/`.
 - `pages.yml` — build & deploy `web/` + `data/` ke Pages setiap push ke `main`.
 
-Stream xtwap punya masa berlaku terbatas, tapi URL player (iframe) tetap valid; scrape ulang tiap 6 jam menjaga data segar.
+Stream xtwap punya masa berlaku terbatas, dan halaman player bisa 404 kalau berkasnya sudah dihapus di sumber. Scraper menandai `players[].live`, halaman nonton menyembunyikan server `live: false`, dan episode lama bisa di-backfill dari root repo:
+
+```
+node scraper/tools/probe-xtwap.mjs           # isi flag live yang belum ada
+node scraper/tools/probe-xtwap.mjs --force   # probe ulang semua
+```
+
+Untuk samehadaku hanya embed Blogger yang bisa diputar dari origin lain: mega/wibufile sudah mati dan filedon mengunci referer ke samehadaku.how, jadi server itu ditampilkan sebagai tautan ke halaman sumber.
 
 ## Web
 
