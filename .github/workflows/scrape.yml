@@ -64,7 +64,6 @@ jobs:
           MODE: ${{ github.event.inputs.mode || 'incremental' }}
           LIMIT: ${{ github.event.inputs.limit || '0' }}
           PAGEBUDGET: ${{ github.event.inputs.pagebudget || '0' }}
-          NIMEKU_API_PASSPHRASE: ${{ secrets.NIMEKU_API_PASSPHRASE }}
         run: |
           node scrape.mjs --source="$SOURCE" --mode="$MODE" --limit="$LIMIT" --pagebudget="$PAGEBUDGET"
 
@@ -101,6 +100,11 @@ jobs:
           mkdir -p _site
           cp -r web/. _site/
           cp -r data _site/data
+
+      - name: Seal universal bundle
+        env:
+          NIMEKU_API_PASSPHRASE: ${{ secrets.NIMEKU_API_PASSPHRASE }}
+        run: node scraper/seal-bundle.mjs --out=_site/data/api.enc.json
 
       - uses: actions/upload-pages-artifact@v3
         with:

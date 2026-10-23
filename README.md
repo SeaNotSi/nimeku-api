@@ -58,7 +58,7 @@ https://seanotsi.github.io/nimeku-api/data/api.enc.json
 https://cdn.jsdelivr.net/gh/SeaNotSi/nimeku-api@main/data/api.enc.json
 ```
 
-Isinya ciphertext AES-256-GCM (gzip di dalam), jadi URL-nya boleh publik tapi tanpa passphrase tidak ada yang bisa dibaca. Passphrase ada di repo secret `NIMEKU_API_PASSPHRASE`; bundle dibangun ulang di akhir setiap scrape (butuh ~3 detik, ~5 MB terkompresi, ~6.6 MB setelah base64).
+Isinya ciphertext AES-256-GCM (gzip di dalam), jadi URL-nya boleh publik tapi tanpa passphrase tidak ada yang bisa dibaca. Passphrase ada di repo secret `NIMEKU_API_PASSPHRASE`. Bundle dibangun saat job deploy Pages (`scraper/seal-bundle.mjs`), bukan di-commit — file 6 MB yang berubah tiap 6 jam akan membengkakkan repo.
 
 Bentuk data setelah dibuka:
 

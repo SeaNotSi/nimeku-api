@@ -30,6 +30,11 @@ jobs:
           cp -r web/. _site/
           cp -r data _site/data
 
+      - name: Seal universal bundle
+        env:
+          NIMEKU_API_PASSPHRASE: ${{ secrets.NIMEKU_API_PASSPHRASE }}
+        run: node scraper/seal-bundle.mjs --out=_site/data/api.enc.json
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

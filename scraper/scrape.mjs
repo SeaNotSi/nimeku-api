@@ -21,7 +21,6 @@ import { SamehadakuClient } from './lib/samehadaku.mjs';
 import { MangadexClient } from './lib/mangadex.mjs';
 import { NhentaiClient } from './lib/nhentai.mjs';
 import { BucketStore, writeChunkedList } from './lib/store.mjs';
-import { buildAggregate, sealAggregate } from './lib/aggregate.mjs';
 import { DATA_DIR, isoNow, log, mapLimit, readJson, writeJson } from './lib/util.mjs';
 
 const args = new Map();
@@ -625,27 +624,6 @@ async function main() {
     generatedAt: isoNow(),
     state,
   });
-  // The universal endpoint: one encrypted file holding the whole catalogue.
-  // Built after meta.json so the bundle carries this run's counters.
-  if (!DRY) {
-    const passphrase = (process.env.NIMEKU_API_PASSPHRASE || '').trim();
-    if (!passphrase) {
-      log('api bundle skipped: NIMEKU_API_PASSPHRASE tidak diset');
-    } else {
-      try {
-        const bundle = await buildAggregate(DATA_DIR);
-        const envelope = sealAggregate(bundle, passphrase);
-        await writeJson(outPath('api.enc.json'), envelope);
-        log(
-          'api bundle',
-          JSON.stringify({ ...bundle.counts, rawBytes: envelope.bytes, sealedBytes: envelope.data.length }),
-        );
-      } catch (err) {
-        log('api bundle failed', err.message);
-      }
-    }
-  }
-
   if (!DRY) await writeJson(STATE_PATH, state);
 
   log('done', JSON.stringify(totals));
