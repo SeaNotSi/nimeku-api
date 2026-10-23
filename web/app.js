@@ -447,12 +447,37 @@ function mountPlayer(players, index) {
     stage.innerHTML = `<video src="${esc(direct)}" controls autoplay playsinline style="width:100%;height:100%"></video>`;
     note.innerHTML = `Sumber langsung (mp4). <a class="muted" href="${esc(direct)}" target="_blank" rel="noopener">buka di tab baru</a>`;
   } else if (embed) {
-    stage.innerHTML = `<iframe src="${esc(embed)}" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>`;
+    stage.innerHTML = `<iframe src="${esc(embed)}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="no-referrer" loading="lazy"></iframe>`;
     note.innerHTML = `Diputar lewat pemutar ${esc(player.label)}. ${direct ? `<a class="muted" href="${esc(direct)}" target="_blank" rel="noopener">tautan langsung</a>` : ''}`;
   } else {
     stage.innerHTML = errorHtml('Server ini tidak punya tautan.');
     note.textContent = '';
   }
+}
+
+/**
+ * samehadaku server viability, checked against the live embeds 2026-10-23:
+ * blogger frames and plays from any origin; filedon enforces a samehadaku.how
+ * referer whitelist; mega files are purged upstream; wibufile hosts refuse
+ * connections. Hiding the dead ones keeps the tab row honest.
+ */
+function samehadakuServers(servers) {
+  const playable = [];
+  const external = [];
+  let dead = 0;
+  for (const server of servers) {
+    const embed = server.embedUrl || '';
+    let host = '';
+    try { host = new URL(embed).hostname; } catch { dead += 1; continue; }
+    if (host === 'www.blogger.com' || host === 'blogger.com') {
+      playable.push({ label: 'Blogspot', kind: 'iframe', embed });
+    } else if (host === 'filedon.co') {
+      external.push(server);
+    } else {
+      dead += 1;
+    }
+  }
+  return { playable, external, dead };
 }
 
 async function renderGomunimeWatch(slug) {
@@ -516,6 +541,8 @@ async function renderSamehadakuWatch(slug) {
   const prev = idx > 0 ? episodes[idx - 1] : null;
   const next = idx >= 0 && idx < episodes.length - 1 ? episodes[idx + 1] : null;
   const servers = (ep.servers || []).filter((s) => s.embedUrl);
+  const { playable, external, dead } = samehadakuServers(servers);
+  const sourcePage = ep.url || null;
 
   content.innerHTML = `
     <div class="breadcrumbs muted">
@@ -523,8 +550,19 @@ async function renderSamehadakuWatch(slug) {
       <span>${esc(ep.title)}</span>
     </div>
     <h1 class="watch-title">${esc(ep.title)}</h1>
-    <p class="muted" style="margin:0 0 6px">${esc(ep.seriesTitle || '')} ${ep.published ? `· ${esc(fmtDate(ep.published))}` : ''} ${servers.length ? `· ${servers.length} server` : ''}</p>
-    ${servers.length ? playerBlock(servers.map((s) => ({ label: s.server, kind: 'iframe', embed: s.embedUrl })), ep) : errorHtml('Server belum ke-scrape untuk episode ini.')}
+    <p class="muted" style="margin:0 0 6px">${esc(ep.seriesTitle || '')} ${ep.published ? `· ${esc(fmtDate(ep.published))}` : ''} ${playable.length ? `· ${playable.length} server bisa diputar` : ''}</p>
+    ${playable.length
+      ? playerBlock(playable, ep)
+      : `<p class="muted">Belum ada server yang bisa diputar dari halaman ini.${sourcePage ? ` <a href="${esc(sourcePage)}" target="_blank" rel="noopener">buka di samehadaku ↗</a>` : ''}</p>`}
+    ${external.length ? `
+      ${section('Server lain', 'dikunci ke samehadaku.how')}
+      <div class="list">${external.map((server) => `
+        <a class="row" href="${esc(sourcePage || '#')}" target="_blank" rel="noopener">
+          <span class="grow">${esc(server.server)} — buka di samehadaku</span>
+          <span class="chip">↗</span>
+        </a>`).join('')}</div>
+      <p class="muted">${external.length} server embed menolak origin lain — diputar dari halaman sumbernya.</p>` : ''}
+    ${dead ? `<p class="muted">${dead} server disembunyikan — host mati atau berkasnya sudah dihapus.</p>` : ''}
     <div class="row" style="justify-content:space-between;border:0;background:transparent;padding:8px 0">
       ${prev ? `<a class="btn" href="#/watch/samehadaku/${prev.slug}">‹ Sebelumnya</a>` : '<span></span>'}
       ${next ? `<a class="btn primary" href="#/watch/samehadaku/${next.slug}">Berikutnya ›</a>` : '<span></span>'}
@@ -544,7 +582,7 @@ async function renderSamehadakuWatch(slug) {
           <span class="chip">${esc(fmtDate(item.published))}</span>
         </a>`).join('')}</div>` : ''}`;
 
-  const players = servers.map((s) => ({ label: s.server, kind: 'iframe', embed: s.embedUrl }));
+  const players = playable;
   if (players.length) {
     mountPlayer(players, 0);
     document.getElementById('player-tabs')?.addEventListener('click', (event) => {
