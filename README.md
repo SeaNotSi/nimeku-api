@@ -55,8 +55,9 @@ Satu file berisi seluruh katalog: anime (dua sumber + player/server), manga, man
 
 ```
 https://seanotsi.github.io/nimeku-api/data/api.enc.json
-https://cdn.jsdelivr.net/gh/SeaNotSi/nimeku-api@main/data/api.enc.json
 ```
+
+Cuma ada di Pages — file ini tidak di-commit, jadi jsDelivr/raw tidak menyediakannya.
 
 Isinya ciphertext AES-256-GCM (gzip di dalam), jadi URL-nya boleh publik tapi tanpa passphrase tidak ada yang bisa dibaca. Passphrase ada di repo secret `NIMEKU_API_PASSPHRASE`. Bundle dibangun saat job deploy Pages (`scraper/seal-bundle.mjs`), bukan di-commit — file 6 MB yang berubah tiap 6 jam akan membengkakkan repo.
 
