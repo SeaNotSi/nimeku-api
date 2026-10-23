@@ -103,13 +103,25 @@ Untuk samehadaku hanya embed Blogger yang bisa diputar dari origin lain: mega/wi
 
 ## Web
 
-`web/` adalah SPA tanpa build step:
+`web/` adalah SPA tanpa build step, gerbang privat dengan tema editorial bersih:
 
-- `#/anime` — gabungan katalog gomunime + samehadaku
-- `#/watch/...` — halaman nonton (ganti server, embed / video langsung)
-- `#/manga`, `#/manhwa` — katalog MangaDex, semua chapter bisa dibaca (manifest cache atau resolve live)
-- `#/doujin` — katalog nhentai, baca langsung
-- pencarian judul per tab
+- **Gerbang** — passphrase API diminta sekali, disimpan di `localStorage` (30 hari). `web/config.js` bisa mengisi default.
+- `#/` beranda — hero rating tertinggi, rail rekomendasi (interleave rating semua jenis), statistik.
+- `#/browse/{anime|manga|manhwa|doujin}` — katalog dengan filter genre + sortir (rating / terpopuler / judul / episode-chapter terbanyak).
+- `#/genres`, `#/genre/{jenis}/{nama}` — indeks genre per jenis (anime, manga, manhwa, doujin dipisah panel).
+- `#/item/...` — detail + poster + sinopsis + chip genre + daftar episode/chapter 1→terbaru + blok "Serupa" (skor irisan genre × rating).
+- `#/watch/...` — pemutar multi-sumber: gomunime (GDPLAYER, HLS, file) dan samehadaku (Server 1/3/4/5 blogger), pilihan tersimpan per episode, navigasi prev/next.
+- `#/read/...` — pembaca manga/manhwa (manifest bucket → mirror r.jina.ai, cache 7 hari) dan doujin (halaman langsung), dropdown bab + prev/next.
+- `#/favorites`, `#/settings` — favorit lokal, tema terang/gelap, reset cache, tukar passphrase.
+- `#/search` — pencarian lintas 4 katalog.
+
+### Papan keamanan
+
+- CSP ketat: `script-src 'self'`, `object-src none`, `form-action none`, `base-uri none`, teks berpola Trusted-Types (level single-source).
+- Semua render via `createElement`/`textContent`, tidak ada `innerHTML`; URL masuk disaring `safeUrl()` (hanya https, host nyata).
+- iframe player ber-`sandbox`, `referrerpolicy=no-referrer`; jendela atas tidak bisa dinavigasi oleh embed (tanpa redirect keluar).
+- `window.open` dinonaktifkan, klik-kanan/drag/copy/select/Ctrl+S/U/P + F12 diblokir, tab tersembunyi → cover penanda, event print juga tercover, API `getDisplayMedia` diblokir.
+- Tidak ada iklan, analitik, atau teks pihak ketiga.
 
 Deploy: otomatis via `pages.yml`, atau copy isi `web/` + folder `data/` ke hosting statis mana pun.
 

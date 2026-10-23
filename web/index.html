@@ -1,39 +1,65 @@
 <!doctype html>
-<html lang="id">
+<html lang="id" data-theme="light">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>nimeku — baca &amp; nonton</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#f7f7f5">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="nimeku — anime, manga, manhwa, dan doujin tanpa iklan.">
+<!--
+  CSP: skrip & gaya hanya same-origin, semua data lewat fetch same-origin atau
+  mirror r.jina.ai. frame-src https: untuk pemutar pihak ketiga; object-src
+  none dan form-action none menutup jalur injeksi klasik.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https: data:; media-src 'self' https: blob:; connect-src 'self' https://r.jina.ai; frame-src https:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types default; upgrade-insecure-requests">
+<title>nimeku</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233f6f5f'/%3E%3Ctext x='16' y='22' font-size='17' font-family='Georgia' fill='white' text-anchor='middle'%3Ek%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css?v=8">
 </head>
-<body>
-<header class="topbar">
-  <a class="brand" href="#/">nimeku<span class="dot">.</span><small>api statis</small></a>
-  <nav class="tabs">
-    <a href="#/anime" data-tab="anime">Anime</a>
-    <a href="#/manga" data-tab="manga">Manga</a>
-    <a href="#/manhwa" data-tab="manhwa">Manhwa</a>
-    <a href="#/doujin" data-tab="doujin">Doujin</a>
-  </nav>
-  <form class="search" id="search-form">
-    <input id="search-input" type="search" placeholder="cari judul…" autocomplete="off" />
+<body class="no-copy">
+<a class="skip" href="#view">Lewati ke konten</a>
+
+<aside class="sidebar" id="sidebar" aria-label="Navigasi">
+  <a class="brand" href="#/"><span class="brand-mark">k</span><span class="brand-name">nimeku</span></a>
+  <nav class="nav" id="nav"></nav>
+  <div class="sidebar-foot" id="sidebarFoot"></div>
+</aside>
+
+<div class="shell">
+  <header class="topbar">
+    <button class="icon-btn" id="menuBtn" aria-label="Menu">☰</button>
+    <h1 class="top-title" id="pageTitle">Home</h1>
+    <div class="search" role="search">
+      <input id="searchInput" type="search" placeholder="Cari judul…" autocomplete="off" spellcheck="false">
+      <button class="icon-btn" id="searchGo" aria-label="Cari">↵</button>
+    </div>
+  </header>
+
+  <main class="view" id="view" tabindex="-1"></main>
+
+  <footer class="foot">nimeku — katalog pribadi, tanpa iklan, tanpa redirect.</footer>
+</div>
+
+<div class="cover" id="cover" hidden>
+  <div class="cover-card">🔒 Konten terlindungi<br><span id="coverHint">kembali ke jendela untuk lanjut</span></div>
+</div>
+
+<div class="unlock" id="unlock" hidden>
+  <form class="unlock-card" id="unlockForm" autocomplete="off">
+    <h2 class="unlock-title">Gerbang nimeku</h2>
+    <p class="unlock-sub">Masukkan passphrase API. Disimpan hanya di perangkat ini.</p>
+    <input id="unlockInput" type="password" placeholder="passphrase" required>
+    <label class="unlock-row"><input type="checkbox" id="unlockRemember" checked> selalu ingat di perangkat ini</label>
+    <button class="btn primary" type="submit">Buka</button>
+    <p class="unlock-err" id="unlockErr" role="status"></p>
   </form>
-  <a class="testlink" href="test.html">lembar uji</a>
-</header>
+</div>
 
-<main id="app">
-  <div id="content"></div>
-</main>
+<div class="toast" id="toast" hidden></div>
 
-<footer class="foot">
-  <span>nimeku — static api</span>
-  <span class="stamp" id="status">memuat…</span>
-  <span>seanotsi.github.io/nimeku-api</span>
-</footer>
-
-<script type="module" src="app.js"></script>
+<script src="config.js"></script>
+<script src="app.js" type="module"></script>
+<noscript><p class="noscript-note">Situs ini butuh JavaScript.</p></noscript>
 </body>
 </html>

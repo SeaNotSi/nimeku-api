@@ -1,904 +1,1077 @@
 /**
- * nimeku web — hash-routed SPA over the static JSON in ../data.
- *
- * Routes:
- *   #/                      home
- *   #/anime  #/manga #/manhwa #/doujin      catalogues
- *   #/series/gomunime/:slug   #/series/samehadaku/:slug
- *   #/watch/gomunime/:slug    #/watch/samehadaku/:slug
- *   #/manga/:lane/:id         (lane=manga|manhwa)
- *   #/read/mangadex/:chapterId
- *   #/doujin/:id              #/read/nhentai/:id
+ * nimeku — SPA berbasis bundle universal terenkripsi.
+ * Render murni lewat createElement/textContent; tidak ada innerHTML.
+ * Semua URL pihak ketiga lewat safeUrl() sebelum menyentuh atribut.
  */
 
-const DATA = new URL('data/', location.href).href;
-const app = document.getElementById('app');
-const content = document.getElementById('content');
-const searchForm = document.getElementById('search-form');
-const searchInput = document.getElementById('search-input');
-const statusEl = document.getElementById('status');
+/* ------------------------------------------------------------------ config */
 
-/* ------------------------------------------------------------- utilities */
+const CFG = window.NX || {};
+const BUNDLE_URL = CFG.bundle || '/data/api.enc.json';
+const MIRROR = CFG.mirror || 'https://r.jina.ai/https://api.mangadex.org/at-home/server/';
+const UPLOADS = CFG.uploads || 'https://uploads.mangadex.org/data/';
+const KEY_STORE = 'nimeku-key';
+const FAV_STORE = 'nimeku-favorites';
+const CITY_CACHE_PREFIX = 'nimeku-ch:';
 
-function esc(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+/* ------------------------------------------------------------------ utils */
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const view = $('#view');
+const titleEl = $('#pageTitle');
+const toastEl = $('#toast');
+function setTitle(text) { $('#pageTitle').textContent = text; }
+const KINDS = ['anime', 'manga', 'manhwa', 'doujin'];
+const KIND_LABEL = { anime: 'Anime', manga: 'Manga', manhwa: 'Manhwa', doujin: 'Doujin' };
+const SOURCE_LABEL = { gomunime: 'Gomunime', samehadaku: 'Samehadaku', mangadex: 'MangaDex', nhentai: 'NHentai' };
+const PLACEHOLDER =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 3'><rect width='2' height='3' fill='#e4e2dd'/><text x='1' y='1.7' font-size='.4' font-family='Georgia' fill='#9a9d9f' text-anchor='middle'>nimeku</text></svg>",
+  );
+
+let toastTimer = 0;
+function toast(message) {
+  toastEl.textContent = message;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.hidden = true; }, 2200);
 }
 
-function fnv1a(value) {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < value.length; i += 1) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === 'class') node.className = value;
+    else if (key === 'text') node.textContent = String(value);
+    else if (key.startsWith('on') && typeof value === 'function') node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value === true ? '' : String(value));
   }
-  return hash >>> 0;
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    node.append(child);
+  }
+  return node;
 }
 
-const bucketOf = (id) => (fnv1a(String(id)) % 256).toString(16).padStart(2, '0');
-
-const jsonCache = new Map();
-async function getJson(url) {
-  if (jsonCache.has(url)) return jsonCache.get(url);
-  const promise = fetch(url)
-    .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status} ${url}`))))
-    .catch((err) => {
-      jsonCache.delete(url);
-      throw err;
-    });
-  jsonCache.set(url, promise);
-  return promise;
-}
-
-async function bucketRecord(dir, id) {
+/** URL hanya https dengan host nyata; javascript:/data://blok lain ditolak. */
+function safeUrl(url) {
+  if (typeof url !== 'string' || !/^https:\/\//i.test(url)) return null;
   try {
-    const data = await getJson(`${DATA}${dir}/${bucketOf(id)}.json`);
-    return data && data[id] !== undefined ? data[id] : null;
-  } catch {
-    return null;
+    const parsed = new URL(url);
+    if (!parsed.hostname.includes('.')) return null;
+    return parsed.toString();
+  } catch { return null; }
+}
+
+function fmtNum(value) {
+  if (value === null || value === undefined) return '—';
+  return new Intl.NumberFormat('id-ID').format(value);
+}
+
+function rating(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || value === null || value === undefined) return null;
+  return el('span', { class: 'badge accent mono', text: `★ ${num.toFixed(2)}` });
+}
+
+function debounce(fn, ms) {
+  let timer = 0;
+  return () => { clearTimeout(timer); timer = setTimeout(fn, ms); };
+}
+
+/* ------------------------------------------------------------------ cache */
+
+function storeGet(key) {
+  try {
+    const entry = JSON.parse(localStorage.getItem(key) || 'null');
+    if (!entry) return null;
+    if (entry.exp && Date.now() > entry.exp) { localStorage.removeItem(key); return null; }
+    return entry.v;
+  } catch { return null; }
+}
+function storeSet(key, value, ttlMs = 7 * 24 * 3600 * 1000) {
+  try { localStorage.setItem(key, JSON.stringify({ v: value, exp: Date.now() + ttlMs })); } catch {}
+}
+function storeDel(key) { try { localStorage.removeItem(key); } catch {} }
+
+/* --------------------------------------------------------------- favorit */
+
+const favorites = new Set(JSON.parse(localStorage.getItem(FAV_STORE) || '[]'));
+const favMeta = new Map(Object.entries(JSON.parse(localStorage.getItem(FAV_STORE + '-meta') || '{}')));
+
+function persistFavorites() {
+  localStorage.setItem(FAV_STORE, JSON.stringify([...favorites]));
+  localStorage.setItem(FAV_STORE + '-meta', JSON.stringify(Object.fromEntries(favMeta)));
+}
+function toggleFavorite(key, meta) {
+  if (favorites.has(key)) favorites.delete(key);
+  else { favorites.add(key); if (meta) favMeta.set(key, meta); }
+  persistFavorites();
+  return favorites.has(key);
+}
+
+/* --------------------------------------------------------------- security */
+
+function showCover() { $('#cover').hidden = false; }
+function hideCover() { $('#cover').hidden = true; }
+
+function onKeyDown(event) {
+  const key = event.key.toLowerCase();
+  const main = event.ctrlKey || event.metaKey;
+  const blocked = [
+    main && ['s', 'u', 'p', 'j'].includes(key),
+    main && event.shiftKey && ['i', 'j', 'c', 'k'].includes(key),
+    event.key === 'F12',
+    main && event.altKey && key === 'k',
+  ].some(Boolean);
+  if (blocked) {
+    event.preventDefault();
+    event.stopPropagation();
+    toast('Shortcut itu diblokir');
   }
 }
 
-const listCache = new Map();
-function getList(key, dir) {
-  if (listCache.has(key)) return listCache.get(key);
-  const state = { items: [], chunks: 0, perChunk: 500, loaded: 0, dir, ready: null };
-  const api = {
-    state,
-    async init() {
-      if (state.ready) return state.ready;
-      state.ready = getJson(`${DATA}${dir}/index.json`)
-        .then((idx) => {
-          state.chunks = idx?.chunks ?? 0;
-          state.perChunk = idx?.perChunk ?? 500;
-          return state;
-        })
-        .catch(() => state);
-      return state.ready;
-    },
-    async more(count = 1) {
-      await api.init();
-      for (let i = 0; i < count && state.loaded < state.chunks; i += 1) {
-        const name = `${String(state.loaded).padStart(3, '0')}.json`;
-        const chunk = await getJson(`${DATA}${dir}/${name}`).catch(() => []);
-        state.items.push(...(Array.isArray(chunk) ? chunk : []));
-        state.loaded += 1;
-      }
-      return state.items;
-    },
-    async all(maxChunks = 40) {
-      await api.init();
-      while (state.loaded < state.chunks && state.loaded < maxChunks) await api.more(4);
-      return state.items;
-    },
-  };
-  listCache.set(key, api);
-  return api;
-}
-
-function fmtDate(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function card({ href, poster, title, meta = [], wide = false }) {
-  return `
-  <a class="card" href="${href}">
-    ${poster
-      ? `<img class="poster${wide ? ' landscape' : ''}" src="${esc(poster)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.opacity=.2" />`
-      : `<div class="poster"></div>`}
-    <div class="card-body">
-      <div class="card-title">${esc(title)}</div>
-      ${meta.length ? `<div class="card-meta">${meta.filter(Boolean).map((m) => `<span class="chip">${esc(m)}</span>`).join('')}</div>` : ''}
-    </div>
-  </a>`;
-}
-
-function section(title, note = '') {
-  return `<div class="section-title"><h2>${esc(title)}</h2><span>${esc(note)}</span></div>`;
-}
-
-function loaderHtml(text = 'memuat…') {
-  return `<div class="center muted">${esc(text)}</div>`;
-}
-
-function errorHtml(text) {
-  return `<div class="center error">${esc(text)}</div>`;
-}
-
-function setActiveTab(tab) {
-  for (const link of document.querySelectorAll('.tabs a')) {
-    link.classList.toggle('active', link.dataset.tab === tab);
-  }
-}
-
-/* ------------------------------------------------------------ list views */
-
-const PAGE_SIZE = 60;
-
-/* ------------------------------------------------------------- anime tab */
-
-const gomunimeSeriesCard = (item) => card({
-  href: `#/series/gomunime/${item.slug}`,
-  poster: item.poster,
-  title: item.title,
-  meta: [item.type, item.status, item.rating ? `★ ${item.rating}` : null, item.totalEpisodes || item.episodes ? `${item.totalEpisodes || item.episodes} eps` : null],
-});
-
-let taxonomyCache = null;
-async function samehadakuTaxonomy() {
-  if (taxonomyCache) return taxonomyCache;
-  taxonomyCache = await getJson(`${DATA}samehadaku/taxonomy.json`).catch(() => ({ genre: {} }));
-  return taxonomyCache;
-}
-
-function samehadakuAnimeCard(item, taxonomy) {
-  const genres = (item.genres || []).map((id) => taxonomy.genre?.[id]).filter(Boolean).slice(0, 2);
-  return card({
-    href: `#/series/samehadaku/${item.slug}`,
-    poster: item.poster,
-    title: item.title,
-    meta: genres,
+function hookSecurity() {
+  document.addEventListener('contextmenu', (event) => { event.preventDefault(); toast('Klik kanan dinonaktifkan'); });
+  document.addEventListener('dragstart', (event) => event.preventDefault());
+  document.addEventListener('selectstart', (event) => {
+    if (!event.target.closest('input,textarea')) event.preventDefault();
   });
-}
-
-function buildAnimeView() {
-  return async function renderAnime(params) {
-    setActiveTab('anime');
-    const q = (params.get('q') || '').toLowerCase();
-    const src = params.get('src') || 'gomunime';
-    content.innerHTML = `
-      <div class="section-title"><h2>Anime</h2><span id="count-note"></span></div>
-      <div class="filters" id="source-chips">
-        <button class="chip" data-src="gomunime">Gomunime</button>
-        <button class="chip" data-src="samehadaku">Samehadaku</button>
-      </div>
-      <div class="grid" id="grid"></div>
-      <div class="pager"><button class="btn" id="more">Muat lagi</button></div>`;
-
-    for (const chip of document.querySelectorAll('#source-chips [data-src]')) {
-      chip.classList.toggle('active', chip.dataset.src === src);
-      chip.addEventListener('click', () => {
-        location.hash = `#/anime?src=${chip.dataset.src}${q ? `&q=${encodeURIComponent(q)}` : ''}`;
-      });
+  document.addEventListener('copy', (event) => {
+    if (!event.target.closest('input,textarea')) { event.preventDefault(); toast('Salin dinonaktifkan'); }
+  });
+  document.addEventListener('keydown', onKeyDown);
+  window.addEventListener('beforeprint', showCover);
+  window.addEventListener('afterprint', () => setTimeout(hideCover, 200));
+  document.addEventListener('visibilitychange', () => (document.hidden ? showCover() : hideCover()));
+  try {
+    if (navigator.mediaDevices?.getDisplayMedia) {
+      navigator.mediaDevices.getDisplayMedia = () => Promise.reject(new Error('Tangkapan layar diblokir'));
     }
+  } catch { /* mediaDevices bisa kosong */ }
+  window.open = () => null;
+}
 
-    const grid = document.getElementById('grid');
-    const noteEl = document.getElementById('count-note');
-    const more = document.getElementById('more');
+/* ------------------------------------------------------------------- data */
 
-    if (src === 'samehadaku') {
-      const taxonomy = await samehadakuTaxonomy();
-      const list = getList('samehadaku-anime', 'samehadaku/anime/list');
-      if (q) await list.all();
-      else await list.more(2);
-      const items = q ? list.state.items.filter((item) => item.title.toLowerCase().includes(q)) : list.state.items;
-      let visible = PAGE_SIZE;
-      const draw = () => {
-        grid.innerHTML = items.slice(0, visible).map((item) => samehadakuAnimeCard(item, taxonomy)).join('') || errorHtml('kosong.');
-        noteEl.textContent = `${items.length} judul`;
-        more.style.display = visible < items.length ? '' : 'none';
-      };
-      more.onclick = async () => {
-        visible += PAGE_SIZE;
-        await list.more(1);
-        draw();
-      };
-      draw();
-    } else {
-      const list = getList('gomunime-series', 'gomunime/list');
-      if (q) await list.all();
-      else await list.more(2);
-      const items = q ? list.state.items.filter((item) => item.title.toLowerCase().includes(q)) : list.state.items;
-      let visible = PAGE_SIZE;
-      const draw = () => {
-        grid.innerHTML = items.slice(0, visible).map(gomunimeSeriesCard).join('') || errorHtml('kosong.');
-        noteEl.textContent = `${items.length} judul`;
-        more.style.display = visible < items.length ? '' : 'none';
-      };
-      more.onclick = async () => {
-        visible += PAGE_SIZE;
-        await list.more(1);
-        draw();
-      };
-      draw();
+const DATA = {
+  bundle: null,
+  tax: null,
+  lists: { anime: [], manga: [], manhwa: [], doujin: [] },
+  byKey: new Map(),
+  genreNames: { anime: new Map(), manga: new Map(), manhwa: new Map(), doujin: new Map() },
+};
+
+function itemKey(kind, source, id) { return `${kind}:${source}:${encodeURIComponent(String(id))}`; }
+function parseKey(key) {
+  const [kind, source, id] = key.split(':').map(decodeURIComponent);
+  return { kind, source, id };
+}
+
+function prettyGenre(raw) {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'string' && /^\d+$/.test(raw)) return raw;
+  return String(raw)
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function resolveGenres(item, kind) {
+  if (kind === 'manga' || kind === 'manhwa') {
+    return (item.tags || []).map((g) => prettyGenre(g)).filter(Boolean);
+  }
+  if (kind === 'doujin') {
+    return (item.tags || [])
+      .filter((tag) => tag && tag.type === 'tag' && tag.name)
+      .map((tag) => prettyGenre(tag.name))
+      .filter(Boolean);
+  }
+  const raw = item.genres || [];
+  if (kind === 'anime') {
+    return raw
+      .map((g) => {
+        if (typeof g === 'string' && /^\d+$/.test(g)) return DATA.tax?.genre?.[g] ?? null;
+        return prettyGenre(g);
+      })
+      .filter(Boolean);
+  }
+  return raw.map((g) => prettyGenre(g)).filter(Boolean);
+}
+
+function ingest(bundle) {
+  DATA.bundle = bundle;
+  for (const item of bundle.anime?.gomunime ?? []) ingestItem(item, 'anime', 'gomunime', item.slug);
+  for (const item of bundle.anime?.samehadaku ?? []) ingestItem(item, 'anime', 'samehadaku', item.slug ?? String(item.id));
+  for (const item of bundle.manga ?? []) ingestItem(item, 'manga', 'mangadex', item.id);
+  for (const item of bundle.manhwa ?? []) ingestItem(item, 'manhwa', 'mangadex', item.id);
+  for (const item of bundle.doujin ?? []) ingestItem(item, 'doujin', 'nhentai', String(item.id));
+}
+
+function ingestItem(item, kind, source, id) {
+  if (!item || !item.title || (!item.poster && !item.cover)) return;
+  // samehadaku menyimpan sumber sebagai `servers`; satukan ke `players`
+  if (kind === 'anime' && source === 'samehadaku') {
+    item.episodes = (item.episodes ?? []).map((e) => ({
+      ...e,
+      players: (e.servers ?? [])
+        .filter((s) => s?.embedUrl)
+        .map((s) => ({ label: s.server ?? 'Server', kind: s.type ?? 'iframe', embed: s.embedUrl, live: undefined })),
+    }));
+  }
+  const entry = {
+    ...item,
+    poster: item.poster || item.cover,
+    key: itemKey(kind, source, id),
+    kind,
+    source,
+    id: String(id),
+    genres: resolveGenres(item, kind),
+  };
+  DATA.byKey.set(entry.key, entry);
+  DATA.lists[kind].push(entry);
+  const map = DATA.genreNames[kind];
+  for (const genre of entry.genres) map.set(genre, (map.get(genre) || 0) + 1);
+}
+
+async function fetchTaxonomy() {
+  try {
+    const res = await fetch('/data/samehadaku/taxonomy.json');
+    if (!res.ok) return null;
+    const tax = await res.json();
+    return tax?.genre && Object.keys(tax.genre).length > 0 ? tax : null;
+  } catch { return null; }
+}
+
+class UnlockNeeded extends Error {}
+
+async function unlockBundle(passphrase) {
+  const response = await fetch(BUNDLE_URL, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`api.enc.json ${response.status}`);
+  const envelope = await response.json();
+  if (envelope.alg !== 'AES-256-GCM') throw new Error('format bundle tidak dikenal');
+
+  const b64 = (v) => Uint8Array.from(atob(v), (c) => c.charCodeAt(0));
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey'],
+  );
+  const cryptoKey = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: b64(envelope.kdf.salt), iterations: envelope.kdf.iterations, hash: 'SHA-256' },
+    keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['decrypt'],
+  );
+  const plain = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: b64(envelope.iv) }, cryptoKey, b64(envelope.data),
+  );
+  return JSON.parse(await new Response(
+    new Blob([plain]).stream().pipeThrough(new DecompressionStream('gzip')),
+  ).text());
+}
+
+async function bootData(pass = '', remember = true) {
+  const passphrase = pass || storeGet(KEY_STORE) || CFG.passphrase || '';
+  if (!passphrase) throw new UnlockNeeded();
+  const bundle = await unlockBundle(passphrase);
+  DATA.tax = await fetchTaxonomy();
+  ingest(bundle);
+  if (pass && remember) storeSet(KEY_STORE, pass, 30 * 24 * 3600 * 1000);
+}
+
+/* ----------------------------------------------------------- rekomendasi */
+
+function likeCount(item) {
+  if (item.kind === 'doujin') return item.favourites ?? 0;
+  if (item.kind === 'anime') return item.episodes?.length ?? 0;
+  return item.follows ?? 0;
+}
+
+function topRated(kind, count) {
+  return DATA.lists[kind]
+    .filter((item) => item.rating !== null && item.rating !== undefined)
+    .sort((a, b) => b.rating - a.rating)
+    .slice(0, count);
+}
+
+function mostFollowed(kind, count) {
+  return DATA.lists[kind].slice().sort((a, b) => likeCount(b) - likeCount(a)).slice(0, count);
+}
+
+function similar(key, kind, count = 12) {
+  const base = DATA.byKey.get(key);
+  if (!base) return [];
+  const scored = DATA.lists[kind]
+    .filter((item) => item.key !== key)
+    .map((item) => {
+      const shared = base.genres.filter((g) =>
+        item.genres.some((h) => h.toLowerCase() === g.toLowerCase())).length;
+      const overlap = base.genres.length ? shared / base.genres.length : 0;
+      return { item, score: overlap * 3 + (item.rating ?? 0) / 20 + likeCount(item) / 120000 };
+    })
+    .sort((a, b) => b.score - a.score);
+  return scored.slice(0, count).map((pair) => pair.item);
+}
+
+/* ------------------------------------------------------------ komponen UI */
+
+function card(item) {
+  const img = el('img', {
+    src: safeUrl(item.poster) || PLACEHOLDER, alt: '', loading: 'lazy',
+    decoding: 'async', referrerpolicy: 'no-referrer',
+  });
+  img.onerror = () => { img.src = PLACEHOLDER; };
+  const badgeText = item.kind === 'doujin'
+    ? `${item.numPages ?? '?'} hal`
+    : `${fmtNum(item.episodes?.length ?? item.chapterCount ?? item.totalEpisodes)} ${item.kind === 'manga' || item.kind === 'manhwa' ? 'ch' : 'ep'}`;
+  return el('a', { class: 'card', href: `#/item/${encodeURIComponent(item.key)}` },
+    img,
+    el('div', { class: 'card-badge' },
+      rating(item.rating) ?? el('span', { class: 'badge', text: badgeText })),
+    el('h3', { text: item.title }),
+  );
+}
+
+function rail(label, items, linkHref) {
+  if (items.length === 0) return null;
+  return el('section', { class: 'rail' },
+    el('div', { class: 'rail-head' },
+      el('h2', { text: label }),
+      linkHref ? el('a', { class: 'link', href: linkHref, text: 'lihat semua →' }) : null,
+    ),
+    el('div', { class: 'cards' }, ...items.map(card)),
+  );
+}
+
+function synBlock(text) {
+  const syn = el('p', { class: 'detail-syn clamp', text });
+  const btn = el('button', {
+    type: 'button', class: 'syn-toggle', text: 'baca selengkapnya',
+    onclick: () => {
+      const open = syn.classList.toggle('open');
+      syn.classList.toggle('clamp', !open);
+      btn.textContent = open ? 'tutup' : 'baca selengkapnya';
+    },
+  });
+  return [syn, btn];
+}
+
+/* ---------------------------------------------------------------- sidebar */
+
+const NAV = [
+  { label: 'katalog', head: true },
+  { label: 'Beranda', href: '#/', icon: '⌂' },
+  { label: 'Anime', href: '#/browse/anime', icon: '◗' },
+  { label: 'Manga', href: '#/browse/manga', icon: '▤' },
+  { label: 'Manhwa', href: '#/browse/manhwa', icon: '▥' },
+  { label: 'Doujin', href: '#/browse/doujin', icon: '♥' },
+  { label: 'Genre', href: '#/genres', icon: '≡' },
+  { label: 'koleksi', head: true },
+  { label: 'Favorit', href: '#/favorites', icon: '♥' },
+  { label: 'Pengaturan', href: '#/settings' },
+];
+
+function renderSidebar() {
+  const current = location.hash.split('#')[0] || '#/';
+  const nav = $('#nav');
+  nav.textContent = '';
+  for (const entry of NAV) {
+    if (entry.head) { nav.append(el('div', { class: 'nav-head', text: entry.label })); continue; }
+    const link = el('a', { href: entry.href, text: entry.label });
+    if (current === entry.href) link.setAttribute('aria-current', 'true');
+    nav.append(link);
+  }
+
+  const counts = DATA.bundle?.counts ?? {};
+  $('#sidebarFoot').textContent =
+    `${fmtNum(counts.anime)} anime · ${fmtNum(counts.manga)} manga · ${fmtNum(counts.manhwa)} manhwa · ${fmtNum(counts.doujin)} doujin`;
+
+  const tabbar = $('#tabbar');
+  if (tabbar) {
+    tabbar.textContent = '';
+    for (const entry of [...NAV.slice(1, 7)]) {
+      const link = el('a', { href: entry.href },
+        el('span', { class: 'ic', text: entry.icon ?? '▤' }),
+        el('span', { text: entry.label }),
+      );
+      if (current === entry.href) link.setAttribute('aria-current', 'true');
+      tabbar.append(link);
     }
-  };
+  }
 }
 
-/* ----------------------------------------------------------- manga lanes */
+/* ----------------------------------------------------------------- render */
 
-function makeMangadexView(lane) {
-  return async function renderMangadex(params) {
-    setActiveTab(lane);
-    const q = (params.get('q') || '').toLowerCase();
-    content.innerHTML = `
-      <div class="section-title"><h2>${lane === 'manga' ? 'Manga' : 'Manhwa'}</h2><span id="count-note"></span></div>
-      <p class="muted" style="margin:0 0 14px">Sumber MangaDex. Chapter yang halamannya sudah di-cache bisa langsung dibaca; sisanya menyusul di refresh berikutnya.</p>
-      <div class="grid" id="grid"></div>
-      <div class="pager"><button class="btn" id="more">Muat lagi</button></div>`;
-    const grid = document.getElementById('grid');
-    const noteEl = document.getElementById('count-note');
-    const more = document.getElementById('more');
-    const list = getList(`mangadex-${lane}`, `mangadex/list/${lane}`);
-    await list.all(12);
-    const items = q ? list.state.items.filter((item) => item.title.toLowerCase().includes(q)) : list.state.items;
-    let visible = PAGE_SIZE;
-    const draw = () => {
-      grid.innerHTML = items.slice(0, visible).map((item) => card({
-        href: `#/manga/${lane}/${item.id}`,
-        poster: item.poster,
-        title: item.title,
-        meta: [item.year, item.status, item.rating ? `★ ${item.rating}` : null, item.follows ? `${item.follows} follow` : null],
-      })).join('') || errorHtml('kosong.');
-      noteEl.textContent = `${items.length} judul`;
-      more.style.display = visible < items.length ? '' : 'none';
-    };
-    more.onclick = () => {
-      visible += PAGE_SIZE;
-      draw();
-    };
-    draw();
+function route() {
+  const raw = location.hash.slice(1) || '/';
+  const [, query] = raw.split('#');
+  const params = new URLSearchParams(query || '');
+  const args = raw.split('#')[0].split('/').filter(Boolean);
+  document.body.removeAttribute('data-nav-open');
+  window.scrollTo({ top: 0 });
+  view.textContent = '';
+  renderSidebar();
+
+  const handlers = {
+    '': () => viewHome(),
+    browse: () => viewBrowse(args[1]),
+    genre: () => viewGenre(args[1], decodeURIComponent(args[2] || '')),
+    genres: () => viewGenres(),
+    item: () => viewItem(decodeURIComponent(args[1])),
+    watch: () => viewWatch(decodeURIComponent(args[1]), decodeURIComponent(args[2] ?? '')),
+    read: () => viewRead(decodeURIComponent(args[1]), decodeURIComponent(args[2] ?? '-')),
+    search: () => viewSearch(params.get('q') || ''),
+    favorites: () => viewFavorites(),
+    settings: () => viewSettings(),
   };
+  (handlers[args[0] === undefined ? '' : args[0]] || handlers[''])();
+  view.focus({ preventScroll: true });
 }
 
-/* ------------------------------------------------------------ doujin tab */
+/* ------------------------------------------------------------------ home */
 
-async function renderDoujin(params) {
-  setActiveTab('doujin');
-  const q = (params.get('q') || '').toLowerCase();
-  content.innerHTML = `
-    <div class="section-title"><h2>Doujin</h2><span id="count-note">18+</span></div>
-    <div class="grid" id="grid"></div>
-    <div class="pager"><button class="btn" id="more">Muat lagi</button></div>`;
-  const grid = document.getElementById('grid');
-  const more = document.getElementById('more');
-  const list = getList('nhentai', 'nhentai/list');
-  if (q) await list.all();
-  else await list.more(2);
-  const items = q ? list.state.items.filter((item) => String(item.title).toLowerCase().includes(q)) : list.state.items;
-  let visible = PAGE_SIZE;
-  const draw = () => {
-    grid.innerHTML = items.slice(0, visible).map((item) => card({
-      href: `#/doujin/${item.id}`,
-      poster: item.cover,
-      title: item.title,
-      meta: [item.pages ? `${item.pages} hal` : null, item.favourites ? `♥ ${item.favourites}` : null, item.detailed ? null : '—'],
-    })).join('') || errorHtml('kosong.');
-    more.style.display = visible < items.length ? '' : 'none';
-  };
-  more.onclick = async () => {
-    visible += PAGE_SIZE;
-    await list.more(1);
-    draw();
-  };
+function interleave(groups) {
+  const pool = [];
+  const max = Math.max(...groups.map((g) => g.length));
+  for (let i = 0; i < max; i += 1) for (const group of groups) if (group[i]) pool.push(group[i]);
+  return pool;
+}
+
+function hero(item) {
+  const actions = el('div', { class: 'hero-actions' });
+  if (item.kind === 'anime') {
+    const first = item.episodes?.[0];
+    if (first) actions.append(el('a', { class: 'btn primary', href: `#/watch/${encodeURIComponent(item.key)}/${encodeURIComponent(first.id)}`, text: '▶ Tonton ep 1' }));
+  } else {
+    const target = item.kind === 'doujin' ? '-' : item.chapters?.[0]?.id ?? null;
+    if (target) actions.append(el('a', { class: 'btn primary', href: `#/read/${encodeURIComponent(item.key)}/${encodeURIComponent(target)}`, text: '📖 Baca sekarang' }));
+  }
+  actions.append(el('a', { class: 'btn', href: `#/item/${encodeURIComponent(item.key)}`, text: 'Detail' }));
+
+  return el('section', { class: 'hero' },
+    el('img', { class: 'hero-poster', src: safeUrl(item.poster) || PLACEHOLDER, alt: '', referrerpolicy: 'no-referrer' }),
+    el('div', {},
+      el('h2', { class: 'hero-title', text: item.title }),
+      el('div', {
+        class: 'hero-meta',
+      },
+        rating(item.rating) ?? el('span', { class: 'badge', text: 'tanpa rating' }),
+        el('span', { class: 'badge', text: KIND_LABEL[item.kind] }),
+        el('span', { class: 'badge', text: SOURCE_LABEL[item.source] }),
+        item.year ? el('span', { class: 'badge mono', text: String(item.year) }) : null,
+      ),
+      ...synBlock(item.synopsis ?? item.description ?? '—'),
+      actions,
+    ),
+  );
+}
+
+function statCard(num, label) {
+  return el('div', { class: 'stat' },
+    el('div', { class: 'num', text: fmtNum(num) }),
+    el('div', { class: 'lbl', text: label }));
+}
+
+function statsRow() {
+  const counts = DATA.bundle?.counts ?? {};
+  const episodeSum = DATA.lists.anime.reduce((total, item) => total + (item.episodes?.length ?? 0), 0);
+  return el('div', { class: 'stats' },
+    statCard(episodeSum, 'episode streaming'),
+    statCard(counts.manga, 'manga'),
+    statCard(counts.manhwa, 'manhwa'),
+    statCard(counts.doujin, 'doujin (halaman)'),
+    statCard(counts.chapters, 'chapter manga+manhwa'),
+  );
+}
+
+function viewHome() {
+  setTitle('Beranda');
+  view.textContent = '';
+  const heroPool = topRated('manga', 12)[0] ?? mostFollowed('anime', 1)[0];
+  if (heroPool) view.append(hero(heroPool));
+  view.append(statsRow());
+  view.append(
+    rail('Rekomendasi untukmu', interleave([
+      topRated('anime', 5), topRated('manga', 5), topRated('manhwa', 5), mostFollowed('doujin', 5),
+    ]), '#/genres'),
+    rail('Anime terpopuler', mostFollowed('anime', 18), '#/browse/anime'),
+    rail('Manga terpopuler', mostFollowed('manga', 18), '#/browse/manga'),
+    rail('Manhwa terpopuler', mostFollowed('manhwa', 18), '#/browse/manhwa'),
+    rail('Doujin terpopuler', mostFollowed('doujin', 18), '#/browse/doujin'),
+  );
+}
+
+/* ----------------------------------------------------------------- browse */
+
+const SORTS = {
+  rating: (a, b) => (b.rating ?? -1) - (a.rating ?? -1),
+  like: (a, b) => likeCount(b) - likeCount(a),
+  title: (a, b) => a.title.localeCompare(b.title),
+  chapters: (a, b) => (b.chapterCount ?? 0) - (a.chapterCount ?? 0),
+};
+
+function browseOptions(kind) {
+  if (kind === 'doujin') return [['like', 'Terfavorit'], ['rating', 'Rating'], ['title', 'Judul A→Z']];
+  if (kind === 'anime') return [['rating', 'Rating'], ['like', 'Episode terbanyak'], ['title', 'Judul A→Z']];
+  return [['rating', 'Rating'], ['like', 'Followers'], ['chapters', 'Chapter terbanyak'], ['title', 'Judul A→Z']];
+}
+
+function matches(item, query) {
+  if (!query) return true;
+  return `${item.title} ${item.altTitle ?? ''}`.toLowerCase().includes(query);
+}
+
+function checkKind(kind) {
+  return KINDS.includes(kind) ? kind : 'anime';
+}
+
+function viewBrowse(rawKind) {
+  const kind = checkKind(rawKind);
+  setTitle(KIND_LABEL[kind]);
+  const state = { q: '', sort: kind === 'doujin' ? 'like' : 'rating', shown: 48, genre: '' };
+  const grid = el('div', { class: 'cards' });
+  const countEl = el('span', { class: 'count' });
+  const moreBtn = el('button', { class: 'btn', text: 'Tampilkan lebih banyak', onclick: () => { state.shown += 48; draw(); } });
+
+  const sortSel = el('select', { onchange: () => { state.sort = sortSel.value; draw(); } });
+  for (const [value, label] of browseOptions(kind)) sortSel.append(el('option', { value, text: label }));
+
+  const genreSel = el('select', { onchange: () => { state.genre = genreSel.value; draw(); } },
+    el('option', { value: '', text: 'Semua genre' }));
+  const genres = [...DATA.genreNames[kind].entries()].sort((a, b) => b[1] - a[1]).slice(0, 40);
+  for (const [genre, count] of genres) {
+    genreSel.append(el('option', { value: genre, text: `${genre} (${count})` }));
+  }
+
+  function draw() {
+    const pool = DATA.lists[kind]
+      .filter((item) => matches(item, state.q))
+      .filter((item) => state.genre === '' || item.genres?.includes(state.genre))
+      .sort(SORTS[state.sort] ?? SORTS.rating);
+    countEl.textContent = `${fmtNum(pool.length)} judul`;
+    grid.textContent = '';
+    for (const item of pool.slice(0, state.shown)) grid.append(card(item));
+    if (pool.length === 0) grid.append(el('div', { class: 'empty', text: 'Tidak cocok.' }));
+    moreBtn.hidden = state.shown >= pool.length;
+  }
+
+  const search = el('input', {
+    type: 'search', placeholder: 'Saring cepat…',
+    oninput: debounce(() => { state.q = search.value.trim().toLowerCase(); draw(); }, 220),
+  });
+
+  view.append(
+    el('div', { class: 'page-head' }, el('h2', { text: KIND_LABEL[kind] }), countEl),
+    el('div', { class: 'toolbar' }, search, sortSel, genreSel),
+    grid,
+    moreBtn,
+  );
   draw();
 }
 
-/* ------------------------------------------------------------ home view */
+/* ------------------------------------------------------------------- genre */
 
-async function renderHome() {
-  setActiveTab('');
-  content.innerHTML = loaderHtml();
-  const [gomuEps, sameEps, mangaList, manhwaList, doujinList] = await Promise.all([
-    getList('gomunime-episodes', 'gomunime/episodes/list').more(1).catch(() => []),
-    getList('samehadaku-episodes', 'samehadaku/episodes/list').more(1).catch(() => []),
-    getList('mangadex-manga', 'mangadex/list/manga').more(2).catch(() => []),
-    getList('mangadex-manhwa', 'mangadex/list/manhwa').more(2).catch(() => []),
-    getList('nhentai', 'nhentai/list').more(1).catch(() => []),
-  ]);
-
-  const latest = [
-    ...gomuEps.slice(0, 12).map((ep) => ({ ...ep, source: 'gomunime', at: ep.published })),
-    ...sameEps.slice(0, 12).map((ep) => ({ ...ep, source: 'samehadaku', at: ep.published })),
-  ].sort((a, b) => String(b.at || '').localeCompare(String(a.at || ''))).slice(0, 12);
-
-  content.innerHTML = `
-    <section class="hero">
-      <p class="kicker">katalog anime · manga · manhwa · doujin</p>
-      <h1>Baca &amp; nonton, <span>langsung</span> dari API statis.</h1>
-      <p class="lede">Data di-scrape terjadwal tiap 6 jam, disajikan sebagai JSON statis dan halaman tanpa build step. Empat sumber, satu meja.</p>
-    </section>
-    ${latest.length ? `
-      ${section('Episode terbaru', 'gomunime + samehadaku')}
-      <div class="grid">${latest.map((ep) => card({
-        href: `#/watch/${ep.source}/${ep.slug}`,
-        poster: ep.poster,
-        title: ep.title,
-        meta: [ep.series || ep.seriesTitle, ep.servers ? `${ep.servers} server` : null, fmtDate(ep.at)],
-      })).join('')}</div>` : ''}
-    ${mangaList.length ? `
-      ${section('Manga populer', 'MangaDex')}
-      <div class="grid">${mangaList.slice(0, 12).map((item) => card({
-        href: `#/manga/manga/${item.id}`,
-        poster: item.poster,
-        title: item.title,
-        meta: [item.year, item.rating ? `★ ${item.rating}` : null],
-      })).join('')}</div>` : ''}
-    ${manhwaList.length ? `
-      ${section('Manhwa populer', 'MangaDex')}
-      <div class="grid">${manhwaList.slice(0, 12).map((item) => card({
-        href: `#/manga/manhwa/${item.id}`,
-        poster: item.poster,
-        title: item.title,
-        meta: [item.year, item.rating ? `★ ${item.rating}` : null],
-      })).join('')}</div>` : ''}
-    ${doujinList.length ? `
-      ${section('Doujin terpopuler', 'nhentai · 18+')}
-      <div class="grid">${doujinList.slice(0, 12).map((item) => card({
-        href: `#/doujin/${item.id}`,
-        poster: item.cover,
-        title: item.title,
-        meta: [item.pages ? `${item.pages} hal` : null, item.favourites ? `♥ ${item.favourites}` : null],
-      })).join('')}</div>` : ''}
-    ${!latest.length && !mangaList.length ? errorHtml('Data belum tersedia. Jalankan scraper dulu.') : ''}`;
+function viewGenres() {
+  setTitle('Genre');
+  view.textContent = '';
+  const cols = el('div', { class: 'genre-cols' });
+  for (const kind of KINDS) {
+    const entries = [...DATA.genreNames[kind].entries()].sort((a, b) => b[1] - a[1]).slice(0, 80);
+    if (entries.length === 0) continue;
+    cols.append(el('section', { class: 'genre-panel' },
+      el('h2', { text: KIND_LABEL[kind] }),
+      el('div', { class: 'genre-flow' },
+        ...entries.map(([genre, count]) =>
+          el('a', { class: 'badge clickable', href: `#/genre/${kind}/${encodeURIComponent(genre)}`, text: `${genre} · ${count}` }))),
+    ));
+  }
+  view.append(el('div', { class: 'page-head' }, el('h2', { text: 'Genre per jenis' })), cols);
 }
 
-/* ---------------------------------------------------------- detail views */
-
-async function renderGomunimeSeries(slug) {
-  setActiveTab('anime');
-  content.innerHTML = loaderHtml();
-  const record = await bucketRecord('gomunime/series', slug);
-  if (!record) {
-    content.innerHTML = errorHtml('Series tidak ditemukan di cache. Jalankan refresh berikutnya.');
-    return;
-  }
-  const episodes = (record.episodes || []).slice().sort((a, b) => (a.number || 0) - (b.number || 0));
-  content.innerHTML = `
-    <div class="detail">
-      <div class="detail-poster"><img class="poster" src="${esc(record.poster)}" alt="" referrerpolicy="no-referrer" /></div>
-      <div>
-        <h1>${esc(record.title)}</h1>
-        <div class="chips">${[record.type, record.status, record.rating ? `★ ${record.rating}` : null, `${episodes.length} episode`]
-          .filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>
-        <div class="chips">${(record.genres || []).map((g) => `<a class="chip" href="#/anime?q=${encodeURIComponent(g.replace(/-/g, ' '))}">${esc(g.replace(/-/g, ' '))}</a>`).join('')}</div>
-        <p class="synopsis">${esc(record.synopsis || '')}</p>
-      </div>
-    </div>
-    ${section('Daftar episode', `gomunime · ${episodes.length}`)}
-    <div class="list">
-      ${episodes.map((ep) => `<a class="row" href="#/watch/gomunime/${ep.slug}">
-        <span class="num">Ep ${esc(ep.number ?? '')}</span>
-        <span class="grow">${esc(record.title)} Episode ${esc(ep.number ?? '')}</span>
-      </a>`).join('') || errorHtml('Belum ada episode di cache.')}
-    </div>`;
+function viewGenre(kind, genreName) {
+  kind = checkKind(kind);
+  setTitle(`${KIND_LABEL[kind]} · ${genreName}`);
+  const items = DATA.lists[kind]
+    .filter((item) => item.genres?.includes(genreName))
+    .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));
+  view.append(
+    el('div', { class: 'page-head' },
+      el('h2', { text: genreName }),
+      el('span', { class: 'count', text: `${fmtNum(items.length)} judul · ${KIND_LABEL[kind]}` }),
+      el('a', { class: 'link', href: '#/genres', text: '← genre lain' }),
+    ),
+    el('div', { class: 'cards' }, ...items.slice(0, 240).map(card)),
+  );
 }
 
-async function renderSamehadakuSeries(slug) {
-  setActiveTab('anime');
-  content.innerHTML = loaderHtml();
-  const [record, taxonomy] = await Promise.all([
-    bucketRecord('samehadaku/anime', slug),
-    samehadakuTaxonomy(),
-  ]);
-  if (!record) {
-    content.innerHTML = errorHtml('Anime tidak ditemukan di cache. Jalankan refresh berikutnya.');
-    return;
-  }
-  const series = await bucketRecord('samehadaku/series', slug);
-  const episodes = (series?.episodes || []).slice().reverse();
-  const genres = (record.genres || []).map((id) => taxonomy.genre?.[id]).filter(Boolean);
-  content.innerHTML = `
-    <div class="detail">
-      <div class="detail-poster"><img class="poster" src="${esc(record.poster)}" alt="" referrerpolicy="no-referrer" /></div>
-      <div>
-        <h1>${esc(record.title)}</h1>
-        <div class="chips">${[`${episodes.length} episode`, record.modified ? `update ${fmtDate(record.modified)}` : null]
-          .filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>
-        <div class="chips">${genres.map((g) => `<span class="chip">${esc(g)}</span>`).join('')}</div>
-        <p class="synopsis">${esc(record.synopsis || '')}</p>
-      </div>
-    </div>
-    ${section('Daftar episode', `samehadaku · ${episodes.length}`)}
-    <div class="list">
-      ${episodes.map((ep) => `<a class="row" href="#/watch/samehadaku/${ep.slug}">
-        <span class="num">${esc(ep.slug.match(/-(\d+)$/)?.[1] ?? '')}</span>
-        <span class="grow">${esc(ep.title)}</span>
-        <span class="chip">${esc(fmtDate(ep.published))}</span>
-      </a>`).join('') || errorHtml('Belum ada episode di cache untuk series ini.')}
-    </div>`;
+/* ------------------------------------------------------------ detail item */
+
+function diamond(item) {
+  const rows = [];
+  if (item.totalEpisodes) rows.push(['Total episode', fmtNum(item.totalEpisodes)]);
+  if (item.chapterCount) rows.push(['Total chapter', fmtNum(item.chapterCount)]);
+  const follows = item.follows ?? item.favourites;
+  if (follows !== null && follows !== undefined) rows.push(['Pengikut', fmtNum(follows)]);
+  if (item.status) rows.push(['Status', String(item.status)]);
+  if (item.year) rows.push(['Tahun', String(item.year)]);
+  if (rows.length === 0) return null;
+  return el('dl', { class: 'kv' },
+    ...rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]),
+  );
 }
 
-function playerBlock(players, episode) {
-  if (!players.length) return errorHtml('Tidak ada server untuk episode ini.');
-  const tabs = players.map((p, i) => `<button class="chip${i === 0 ? ' active' : ''}" data-idx="${i}">${esc(p.label)}</button>`).join('');
-  return `
-    <div class="player-wrap" id="player-stage"></div>
-    <div class="filters" id="player-tabs">${tabs}</div>
-    <p class="muted" id="player-note"></p>`;
+function episodeList(item) {
+  const pool = (item.episodes ?? []).slice().sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+  if (pool.length === 0) return el('div', { class: 'empty', text: 'Belum ada episode di bundle.' });
+  const grid = el('div', { class: 'list-grid' });
+  for (const episode of pool) {
+    const liveCount = (episode.players ?? []).filter((p) => p.live !== false).length;
+    grid.append(el('a', { class: 'ep-link', href: `#/watch/${encodeURIComponent(item.key)}/${encodeURIComponent(episode.id)}` },
+      el('span', { text: `Ep ${episode.number ?? '?'}` }),
+      el('span', { class: 'badge', text: `${liveCount} src` }),
+    ));
+  }
+  return el('section', { class: 'rel' },
+    el('div', { class: 'rail-head' },
+      el('h2', { text: 'Episode' }),
+      el('span', { class: 'count', text: `1–${pool[pool.length - 1]?.number ?? pool.length} · ${fmtNum(pool.length)} entri` })),
+    grid,
+  );
 }
 
-function mountPlayer(players, index) {
-  const stage = document.getElementById('player-stage');
-  const note = document.getElementById('player-note');
-  const player = players[index];
-  if (!stage || !player) {
-    if (stage) stage.innerHTML = errorHtml('Server tidak tersedia.');
-    return;
+function chapterList(item) {
+  const pool = (item.chapters ?? []).slice().sort((a, b) => Number(a.number) - Number(b.number));
+  if (pool.length === 0) return el('div', { class: 'empty', text: 'Belum ada chapter.' });
+  const grid = el('div', { class: 'list-grid' });
+  for (const chapter of pool) {
+    grid.append(el('a', { class: 'ep-link', href: `#/read/${encodeURIComponent(item.key)}/${encodeURIComponent(chapter.id)}` },
+      el('span', { text: `Ch ${textOr(chapter.number)}` }),
+      el('span', { class: 'badge', text: chapter.baked ? 'di cache' : 'live' }),
+    ));
   }
-  const direct = player.file || null;
-  const embed = player.embed || null;
-  if (player.kind === 'file' && direct) {
-    stage.innerHTML = `<video src="${esc(direct)}" controls autoplay playsinline style="width:100%;height:100%"></video>`;
-    note.innerHTML = `Sumber langsung (mp4). <a class="muted" href="${esc(direct)}" target="_blank" rel="noopener">buka di tab baru</a>`;
-  } else if (embed) {
-    stage.innerHTML = `<iframe src="${esc(embed)}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="no-referrer" loading="lazy"></iframe>`;
-    note.innerHTML = `Diputar lewat pemutar ${esc(player.label)}. ${direct ? `<a class="muted" href="${esc(direct)}" target="_blank" rel="noopener">tautan langsung</a>` : ''}`;
-  } else {
-    stage.innerHTML = errorHtml('Server ini tidak punya tautan.');
-    note.textContent = '';
-  }
+  return el('section', { class: 'rel' },
+    el('div', { class: 'rail-head' },
+      el('h2', { text: 'Chapter' }),
+      el('span', { class: 'count', text: `${fmtNum(pool.length)} · terakhir ${textOr(pool[pool.length - 1]?.number)}` })),
+    grid,
+  );
 }
 
-/**
- * samehadaku server viability, checked against the live embeds 2026-10-23:
- * blogger frames and plays from any origin; filedon enforces a samehadaku.how
- * referer whitelist; mega files are purged upstream; wibufile hosts refuse
- * connections. Hiding the dead ones keeps the tab row honest.
- */
-function samehadakuServers(servers) {
-  const playable = [];
-  const external = [];
-  let dead = 0;
-  for (const server of servers) {
-    const embed = server.embedUrl || '';
-    let host = '';
-    try { host = new URL(embed).hostname; } catch { dead += 1; continue; }
-    if (host === 'www.blogger.com' || host === 'blogger.com') {
-      playable.push({ label: 'Blogspot', kind: 'iframe', embed });
-    } else if (host === 'filedon.co') {
-      external.push(server);
-    } else {
-      dead += 1;
-    }
-  }
-  return { playable, external, dead };
+function doujinPanel(item) {
+  const pages = item.pages ?? [];
+  const body = pages.length
+    ? el('a', { class: 'btn primary', href: `#/read/${encodeURIComponent(item.key)}/-`, text: `📖 Baca ${pages.length} halaman` })
+    : el('span', { class: 'badge', text: 'Halaman belum tersedia' });
+  return el('section', { class: 'rel' },
+    el('div', { class: 'rail-head' }, el('h2', { text: 'Isi' })),
+    body,
+  );
 }
 
-/**
- * gomunime ordering: gdplayer is the only host verified to play from a
- * third-party origin. A resolved HLS still mounts as an iframe because
- * hls.xtwap.top pins Access-Control-Allow-Origin to play.xtwap.top, so hls.js
- * cannot fetch it from github.io.
- */
-function gomunimeRank(player) {
-  if (/gdplayer\.to/i.test(String(player.embed || ''))) return 0;
-  if (player.hls || player.kind === 'hls') return 1;
-  return 2;
+function textOr(value, fallback = '?') {
+  return value === null || value === undefined || value === '' ? fallback : String(value);
 }
 
-async function renderGomunimeWatch(slug) {
-  setActiveTab('anime');
-  content.innerHTML = loaderHtml();
-  const ep = await bucketRecord('gomunime/episodes', slug);
-  if (!ep) {
-    content.innerHTML = errorHtml('Episode belum ada di cache. Nanti setelah refresh berikutnya.');
-    return;
-  }
-  const series = ep.seriesSlug ? await bucketRecord('gomunime/series', ep.seriesSlug) : null;
-  const episodes = (series?.episodes || []).slice().sort((a, b) => (a.number || 0) - (b.number || 0));
-  const idx = episodes.findIndex((item) => item.slug === slug);
-  const prev = idx > 0 ? episodes[idx - 1] : null;
-  const next = idx >= 0 && idx < episodes.length - 1 ? episodes[idx + 1] : null;
-  const allPlayers = ep.players || [];
-  const players = allPlayers
-    .filter((player) => player.live !== false)
-    .sort((a, b) => gomunimeRank(a) - gomunimeRank(b));
-  const deadPlayers = allPlayers.length - players.length;
+function viewItem(key) {
+  const item = DATA.byKey.get(key);
+  if (!item) { viewHome(); return; }
+  setTitle(item.title);
 
-  content.innerHTML = `
-    <div class="breadcrumbs muted">
-      <a href="#/anime">Anime</a> › ${series ? `<a href="#/series/gomunime/${series.slug}">${esc(series.title)}</a> ›` : ''} <span>Episode ${esc(ep.episode ?? '')}</span>
-    </div>
-    <h1 class="watch-title">${esc(ep.title)}</h1>
-    <p class="muted" style="margin:0 0 6px">${esc(ep.series || '')} ${ep.rating ? `· ★ ${esc(ep.rating)}` : ''} ${ep.published ? `· ${esc(fmtDate(ep.published))}` : ''} ${players.length ? `· ${players.length} server bisa diputar` : ''}</p>
-    ${playerBlock(players, ep)}
-    ${deadPlayers ? `<p class="muted">${deadPlayers} server mati disembunyikan — berkasnya sudah dihapus di sumber.</p>` : ''}
-    <div class="row" style="justify-content:space-between;border:0;background:transparent;padding:8px 0">
-      ${prev ? `<a class="btn" href="#/watch/gomunime/${prev.slug}">‹ Episode ${esc(prev.number)}</a>` : '<span></span>'}
-      ${next ? `<a class="btn primary" href="#/watch/gomunime/${next.slug}">Episode ${esc(next.number)} ›</a>` : '<span></span>'}
-    </div>
-    ${series ? `
-      ${section(`Episode lain — ${series.title}`, '')}
-      <div class="list">${episodes.slice().reverse().map((item) => `
-        <a class="row${item.slug === slug ? ' is-current' : ''}" href="#/watch/gomunime/${item.slug}">
-          <span class="num">Ep ${esc(item.number)}</span>
-          <span class="grow">${esc(series.title)} Episode ${esc(item.number)}</span>
-        </a>`).join('')}</div>` : ''}`;
-
-  if (players.length) {
-    mountPlayer(players, 0);
-    document.getElementById('player-tabs')?.addEventListener('click', (event) => {
-      const button = event.target.closest('button[data-idx]');
-      if (!button) return;
-      for (const chip of document.querySelectorAll('#player-tabs button')) chip.classList.remove('active');
-      button.classList.add('active');
-      mountPlayer(players, Number(button.dataset.idx));
-    });
-  }
-}
-
-async function renderSamehadakuWatch(slug) {
-  setActiveTab('anime');
-  content.innerHTML = loaderHtml();
-  const ep = await bucketRecord('samehadaku/episodes', slug);
-  if (!ep) {
-    content.innerHTML = errorHtml('Episode belum ada di cache. Nanti setelah refresh berikutnya.');
-    return;
-  }
-  const seriesSlug = ep.seriesUrl ? ep.seriesUrl.replace(/\/+$/, '').split('/').pop() : null;
-  const series = seriesSlug ? await bucketRecord('samehadaku/series', seriesSlug) : null;
-  const episodes = (series?.episodes || []).slice();
-  const idx = episodes.findIndex((item) => item.slug === slug);
-  const prev = idx > 0 ? episodes[idx - 1] : null;
-  const next = idx >= 0 && idx < episodes.length - 1 ? episodes[idx + 1] : null;
-  const servers = (ep.servers || []).filter((s) => s.embedUrl);
-  const { playable, external, dead } = samehadakuServers(servers);
-  const sourcePage = ep.url || null;
-
-  content.innerHTML = `
-    <div class="breadcrumbs muted">
-      <a href="#/anime?src=samehadaku">Anime</a> › ${series ? `<a href="#/series/samehadaku/${series.slug}">${esc(series.title)}</a> ›` : ''}
-      <span>${esc(ep.title)}</span>
-    </div>
-    <h1 class="watch-title">${esc(ep.title)}</h1>
-    <p class="muted" style="margin:0 0 6px">${esc(ep.seriesTitle || '')} ${ep.published ? `· ${esc(fmtDate(ep.published))}` : ''} ${playable.length ? `· ${playable.length} server bisa diputar` : ''}</p>
-    ${playable.length
-      ? playerBlock(playable, ep)
-      : `<p class="muted">Belum ada server yang bisa diputar dari halaman ini.${sourcePage ? ` <a href="${esc(sourcePage)}" target="_blank" rel="noopener">buka di samehadaku ↗</a>` : ''}</p>`}
-    ${external.length ? `
-      ${section('Server lain', 'dikunci ke samehadaku.how')}
-      <div class="list">${external.map((server) => `
-        <a class="row" href="${esc(sourcePage || '#')}" target="_blank" rel="noopener">
-          <span class="grow">${esc(server.server)} — buka di samehadaku</span>
-          <span class="chip">↗</span>
-        </a>`).join('')}</div>
-      <p class="muted">${external.length} server embed menolak origin lain — diputar dari halaman sumbernya.</p>` : ''}
-    ${dead ? `<p class="muted">${dead} server disembunyikan — host mati atau berkasnya sudah dihapus.</p>` : ''}
-    <div class="row" style="justify-content:space-between;border:0;background:transparent;padding:8px 0">
-      ${prev ? `<a class="btn" href="#/watch/samehadaku/${prev.slug}">‹ Sebelumnya</a>` : '<span></span>'}
-      ${next ? `<a class="btn primary" href="#/watch/samehadaku/${next.slug}">Berikutnya ›</a>` : '<span></span>'}
-    </div>
-    ${(ep.downloads || []).length ? `
-      ${section('Download', 'samehadaku')}
-      <div class="list">${ep.downloads.map((block) => `
-        <div class="row" style="flex-direction:column;align-items:stretch;gap:6px">
-          <strong>${esc(block.format)}</strong>
-          ${block.qualities.map((q) => `<div class="card-meta"><span class="chip">${esc(q.quality)}</span>${q.links.map((l) => `<a class="chip" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.host)}</a>`).join('')}</div>`).join('')}
-        </div>`).join('')}</div>` : ''}
-    ${series ? `
-      ${section(`Episode lain — ${series.title}`, '')}
-      <div class="list">${episodes.slice().reverse().map((item) => `
-        <a class="row${item.slug === slug ? ' is-current' : ''}" href="#/watch/samehadaku/${item.slug}">
-          <span class="grow">${esc(item.title)}</span>
-          <span class="chip">${esc(fmtDate(item.published))}</span>
-        </a>`).join('')}</div>` : ''}`;
-
-  const players = playable;
-  if (players.length) {
-    mountPlayer(players, 0);
-    document.getElementById('player-tabs')?.addEventListener('click', (event) => {
-      const button = event.target.closest('button[data-idx]');
-      if (!button) return;
-      for (const chip of document.querySelectorAll('#player-tabs button')) chip.classList.remove('active');
-      button.classList.add('active');
-      mountPlayer(players, Number(button.dataset.idx));
-    });
-  }
-}
-
-/* ---------------------------------------------------------- manga detail */
-
-async function renderMangaDetail(lane, id) {
-  setActiveTab(lane);
-  content.innerHTML = loaderHtml();
-  const item = await bucketRecord('mangadex/items', id);
-  if (!item) {
-    content.innerHTML = errorHtml('Judul belum ada di cache detail. Coba lagi setelah refresh.');
-    return;
-  }
-  const chapters = (item.chapters || []).slice().sort((a, b) => (parseFloat(a.number) || 0) - (parseFloat(b.number) || 0));
-  const baked = chapters.filter((ch) => ch.baked).length;
-  content.innerHTML = `
-    <div class="detail">
-      <div class="detail-poster"><img class="poster" src="${esc(item.poster)}" alt="" referrerpolicy="no-referrer" /></div>
-      <div>
-        <h1>${esc(item.title)}</h1>
-        ${item.altTitle ? `<p class="muted" style="margin:0 0 6px">${esc(item.altTitle)}</p>` : ''}
-        <div class="chips">${[item.status, item.year, item.rating ? `★ ${item.rating}` : null, item.follows ? `${item.follows} follow` : null, `${chapters.length} chapter · ${baked} di cache${chapters.length - baked > 0 ? ` · ${chapters.length - baked} live` : ''}`]
-          .filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>
-        <div class="chips">${(item.tags || []).map((t) => `<a class="chip" href="#/${lane}?q=${encodeURIComponent(t)}">${esc(t)}</a>`).join('')}</div>
-        <p class="synopsis">${esc(item.description || '')}</p>
-      </div>
-    </div>
-    ${section('Daftar chapter', 'terbaru di atas')}
-    <div class="list">
-      ${chapters.slice().reverse().map((ch) => `
-        <a class="row" href="#/read/mangadex/${ch.id}"
-           data-chapter-id="${esc(ch.id)}"
-           data-manga-id="${esc(item.id)}"
-           data-manga-title="${esc(item.title)}"
-           data-lane="${esc(item.lane || 'manga')}"
-           data-chapter-number="${esc(ch.number ?? '')}">
-          <span class="num">Ch ${esc(ch.number ?? '?')}</span>
-          <span class="grow">${esc(ch.title || item.title)}</span>
-          <span class="chip">${esc(ch.lang || '')}</span>
-          <span class="chip">${ch.baked ? `${esc(ch.pages)} hal` : 'live'}</span>
-        </a>`).join('') || errorHtml('Chapter belum ada di cache.')}
-    </div>`;
-}
-
-/* ------------------------------------------------ mangadex reader */
-
-const ATHOME_MIRROR = 'https://r.jina.ai/';
-const ATHOME_ORIGIN = 'https://api.mangadex.org/at-home/server/';
-const UPLOADS_BASE = 'https://uploads.mangadex.org/data/';
-const MANIFEST_TTL = 7 * 24 * 3600 * 1000;
-
-function readChapterContext(chapterId) {
-  try {
-    const raw = sessionStorage.getItem(`nimeku:ctx:${chapterId}`);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-// The item page knows the title and lane even when the chapter itself was never
-// baked, so the click carries that context into the reader route.
-document.addEventListener('click', (event) => {
-  const row = event.target.closest?.('a[data-chapter-id]');
-  if (!row) return;
-  try {
-    sessionStorage.setItem(`nimeku:ctx:${row.dataset.chapterId}`, JSON.stringify({
-      mangaId: row.dataset.mangaId,
-      mangaTitle: row.dataset.mangaTitle,
-      lane: row.dataset.lane,
-      number: row.dataset.chapterNumber,
-    }));
-  } catch {
-    /* private mode: the reader falls back to whatever the store has */
-  }
-});
-
-function cachedManifest(chapterId) {
-  try {
-    const raw = localStorage.getItem(`nimeku:manifest:${chapterId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed.hash || !Array.isArray(parsed.files) || !parsed.files.length) return null;
-    if (Date.now() - (parsed.at || 0) > MANIFEST_TTL) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function rememberManifest(chapterId, manifest) {
-  try {
-    localStorage.setItem(`nimeku:manifest:${chapterId}`, JSON.stringify({ ...manifest, at: Date.now() }));
-  } catch {
-    /* quota or private mode: the current view still renders */
-  }
-}
-
-/**
- * The MangaDex API sends no Access-Control-Allow-Origin, so the browser cannot
- * call at-home directly. r.jina.ai relays the same JSON, echoes the page origin,
- * and wraps the body in { data: { content: "<json>" } }.
- */
-async function fetchManifest(chapterId) {
-  const cached = cachedManifest(chapterId);
-  if (cached) return cached;
-  const response = await fetch(`${ATHOME_MIRROR}${ATHOME_ORIGIN}${chapterId}`, {
-    headers: { Accept: 'application/json' },
+  const favBtn = el('button', {
+    class: 'fav-btn',
+    'aria-pressed': String(favorites.has(key)),
+    text: favorites.has(key) ? '★' : '☆',
+    title: favorites.has(key) ? 'Hapus dari favorit' : 'Tambah favorit',
+    onclick: () => {
+      const on = toggleFavorite(key, { title: item.title, poster: item.poster, kind: item.kind });
+      favBtn.textContent = on ? '★' : '☆';
+      favBtn.setAttribute('aria-pressed', String(on));
+      toast(on ? 'Masuk favorit' : 'Keluar dari favorit');
+    },
   });
-  if (!response.ok) throw new Error(`mirror HTTP ${response.status}`);
-  const envelope = await response.json();
-  const payload = JSON.parse(envelope?.data?.content || '{}');
-  const hash = payload?.chapter?.hash;
-  const files = payload?.chapter?.data || [];
-  if (!hash || !files.length) throw new Error('manifest kosong');
-  const manifest = { hash, files };
-  rememberManifest(chapterId, manifest);
-  return manifest;
+
+  const chips = (item.genres ?? []).slice(0, 12).map((genre) =>
+    el('a', { class: 'badge clickable', href: `#/genre/${item.kind}/${encodeURIComponent(genre)}`, text: genre }));
+
+  view.append(
+    el('div', { class: 'detail-top' },
+      el('img', { class: 'detail-poster', src: safeUrl(item.poster) || PLACEHOLDER, alt: '', referrerpolicy: 'no-referrer' }),
+      el('div', {},
+        el('h2', { class: 'hero-title', text: item.title }),
+        el('div', { class: 'hero-meta' },
+          favBtn,
+          rating(item.rating) ?? el('span', { class: 'badge', text: 'tanpa rating' }),
+          el('span', { class: 'badge', text: SOURCE_LABEL[item.source] }),
+          el('span', { class: 'badge', text: KIND_LABEL[item.kind] }),
+        ),
+        chips.length ? el('div', { class: 'chip-row' }, ...chips) : null,
+        ...synBlock(item.synopsis ?? item.description ?? '—'),
+        diamond(item),
+      ),
+    ),
+    item.kind === 'anime' ? episodeList(item) : null,
+    item.kind === 'manga' || item.kind === 'manhwa' ? chapterList(item) : null,
+    item.kind === 'doujin' ? doujinPanel(item) : null,
+    el('section', { class: 'rel' },
+      el('div', { class: 'rail-head' }, el('h2', { text: `Serupa · ${KIND_LABEL[item.kind]}` })),
+      el('div', { class: 'cards' }, ...similar(item.key, item.kind, 12).map(card)),
+    ),
+  );
 }
 
-function uploadsUrls(manifest) {
-  return manifest.files.map((file) => `${UPLOADS_BASE}${manifest.hash}/${file}`);
-}
+/* ------------------------------------------------------------------ watch */
 
-function chapterImageUrls(chapter) {
-  if (Array.isArray(chapter.pages) && chapter.pages.length > 0) return chapter.pages;
-  if (chapter.hash && Array.isArray(chapter.files) && chapter.files.length > 0) {
-    return uploadsUrls(chapter);
-  }
-  return [];
-}
-
-async function renderMangaReader(chapterId) {
-  content.innerHTML = loaderHtml();
-  const stored = await bucketRecord('mangadex/chapters', chapterId);
-  const context = readChapterContext(chapterId);
-  // A deep link carries no session context; the mirror still resolves the
-  // chapter's pages, so render what is known instead of refusing the route.
-  const chapter = stored
-    || (context ? { id: chapterId, ...context } : { id: chapterId, mangaId: null, mangaTitle: '', lane: 'manga', number: null });
-  const item = chapter.mangaId ? await bucketRecord('mangadex/items', chapter.mangaId) : null;
-  const siblings = (item?.chapters || []).slice()
-    .sort((a, b) => (parseFloat(a.number) || 0) - (parseFloat(b.number) || 0));
-  const idx = siblings.findIndex((ch) => ch.id === chapterId);
-  const prev = idx > 0 ? siblings[idx - 1] : null;
-  const next = idx >= 0 && idx < siblings.length - 1 ? siblings[idx + 1] : null;
-  const lane = chapter.lane || 'manga';
-
-  const crumbs = chapter.mangaId
-    ? `<div class="breadcrumbs muted">
-         <a href="#/${esc(lane)}">${esc(lane.toUpperCase())}</a> ›
-         <a href="#/manga/${esc(lane)}/${esc(chapter.mangaId)}">${esc(chapter.mangaTitle || '')}</a> ›
-         <span>Chapter ${esc(chapter.number ?? '')}</span>
-       </div>`
-    : `<div class="breadcrumbs muted"><span>Chapter ${esc(chapterId.slice(0, 8))}…</span></div>`;
-
-  content.innerHTML = `
-    ${crumbs}
-    <div class="reader" id="reader-pages">${loaderHtml('menyiapkan halaman…')}</div>
-    ${chapter.mangaId ? `<div class="reader-nav">
-      ${prev ? `<a href="#/read/mangadex/${prev.id}">‹ Ch ${esc(prev.number)}</a>` : '<span>‹ Ch —</span>'}
-      <a href="#/manga/${esc(lane)}/${esc(chapter.mangaId)}">Daftar chapter</a>
-      ${next ? `<a href="#/read/mangadex/${next.id}">Ch ${esc(next.number)} ›</a>` : '<span>Ch — ›</span>'}
-    </div>` : ''}`;
-
-  const target = document.getElementById('reader-pages');
-  let images = stored ? chapterImageUrls(stored) : [];
-  if (!images.length) {
-    try {
-      images = uploadsUrls(await fetchManifest(chapterId));
-    } catch (err) {
-      target.innerHTML = `<div class="center error">Halaman gagal dimuat (${esc(err.message)}). <a href="https://mangadex.org/chapter/${esc(chapterId)}" target="_blank" rel="noreferrer">Buka di MangaDex</a></div>`;
-      return;
+function sourcesFor(entry) {
+  const out = [];
+  for (const source of entry.players ?? []) {
+    if (source.live === false) continue;
+    if (source.kind === 'file' || source.kind === 'hls') {
+      const url = safeUrl(source.file) ?? safeUrl(source.hls);
+      if (url) out.push({ label: source.label || 'Video', kind: source.kind, src: url, media: true });
+    } else {
+      const embed = safeUrl(source.embed);
+      if (embed) out.push({ label: source.label || 'Embed', kind: source.kind, src: embed, media: false });
     }
   }
-  target.innerHTML = images
-    .map((url, index) => `<img src="${esc(url)}" alt="halaman ${index + 1}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`)
-    .join('');
+  return out;
 }
 
-/* --------------------------------------------------------- doujin detail */
+function viewWatch(key, epId) {
+  const item = DATA.byKey.get(key);
+  const episode = item?.episodes?.find((e) => String(e.id) === epId);
+  if (!item || !episode) { viewHome(); return; }
+  setTitle(`${item.title} · Ep ${textOr(episode.number)}`);
 
-async function renderDoujinDetail(id) {
-  setActiveTab('doujin');
-  content.innerHTML = loaderHtml();
-  const item = await bucketRecord('nhentai/items', id);
-  if (!item) {
-    content.innerHTML = errorHtml('Galeri belum ada di cache.');
-    return;
+  const pool = (item.episodes ?? []).slice().sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
+  const index = pool.findIndex((e) => String(e.id) === String(episode.id));
+  const goEpisode = (e) => `#/watch/${encodeURIComponent(item.key)}/${encodeURIComponent(e.id)}`;
+
+  const sources = sourcesFor(episode);
+  const tabs = el('div', { class: 'player-tabs' });
+  const frame = el('div', { class: 'player-wrap' });
+  const navIndex = el('input', { type: 'hidden', value: String(index) });
+
+  if (sources.length === 0) {
+    frame.append(el('div', { class: 'empty', text: 'Semua sumber episode ini terdeteksi mati. Coba episode lain.' }));
+  } else {
+    let active = Math.min(Number(localStorage.getItem(`nimeku-p:${episode.id}`) ?? 0), sources.length - 1);
+    if (Number.isNaN(active) || active < 0) active = 0;
+
+    const renderSource = () => {
+      for (const node of tabs.children) node.setAttribute('aria-selected', 'false');
+      tabs.children[active]?.setAttribute('aria-selected', 'true');
+      localStorage.setItem(`nimeku-p:${episode.id}`, String(active));
+      frame.textContent = '';
+      const source = sources[active];
+      if (source.media) {
+        const video = el('video', { controls: true, playsinline: true, src: source.src, referrerpolicy: 'no-referrer' });
+        video.onerror = () => {
+          frame.textContent = '';
+          frame.append(el('div', { class: 'empty', text: 'Video langsung gagal dimuat. Coba tab lain.' }));
+        };
+        frame.append(video);
+      } else {
+        frame.append(el('iframe', {
+          src: source.src,
+          referrerpolicy: 'no-referrer',
+          allow: 'autoplay; fullscreen; encrypted-media; picture-in-picture',
+          sandbox: 'allow-scripts allow-same-origin allow-presentation allow-forms allow-popups-to-escape-sandbox',
+        }));
+      }
+    };
+
+    sources.forEach((source, index2) => {
+      tabs.append(el('button', {
+        type: 'button', class: 'tab', text: source.label,
+        onclick: () => { active = index2; renderSource(); },
+      }));
+    });
+    renderSource();
   }
-  const title = item.titlePretty || item.titleEnglish || item.titleJapanese || item.id;
-  const tags = (item.tags || []).filter((tag) => tag.type === 'tag' || tag.type === 'parody' || tag.type === 'artist');
-  content.innerHTML = `
-    <div class="detail">
-      <div class="detail-poster"><img class="poster" src="${esc(item.thumbnail || item.cover)}" alt="" referrerpolicy="no-referrer" /></div>
-      <div>
-        <h1>${esc(title)}</h1>
-        <div class="chips">${[`${item.numPages || 0} halaman`, item.favourites ? `♥ ${item.favourites}` : null, item.uploadDate ? fmtDate(Number(item.uploadDate) * 1000) : null, item.scanlator || null]
-          .filter(Boolean).map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>
-        <div class="chips">${tags.slice(0, 14).map((t) => `<span class="chip">${esc(t.name)}</span>`).join('')}</div>
-        <p style="margin:16px 0 0">
-          ${item.pages?.length
-            ? `<a class="btn primary" href="#/read/nhentai/${item.id}">Baca sekarang (${item.pages.length} hal)</a>`
-            : `<span class="muted">Halaman belum di-cache. Coba lagi setelah refresh berikutnya.</span>`}
-        </p>
-      </div>
-    </div>`;
+
+  view.append(
+    el('div', { class: 'page-head' },
+      el('h2', { text: `Episode ${textOr(episode.number)} · ${item.title}` }),
+      el('a', { class: 'link', href: `#/item/${encodeURIComponent(item.key)}`, text: '← daftar episode' }),
+      el('span', { class: 'badge', text: SOURCE_LABEL[item.source] }),
+    ),
+    frame,
+    tabs,
+    el('div', { class: 'chapter-bar' },
+      index > 0
+        ? el('a', { class: 'btn', href: goEpisode(pool[index - 1]), text: `← Ep ${textOr(pool[index - 1].number)}` })
+        : el('span'),
+      el('span'),
+      index < pool.length - 1
+        ? el('a', { class: 'btn', href: goEpisode(pool[index + 1]), text: `Ep ${textOr(pool[index + 1].number)} →` })
+        : el('span'),
+    ),
+    navIndex,
+  );
 }
 
-async function renderDoujinReader(id) {
-  content.innerHTML = loaderHtml();
-  const item = await bucketRecord('nhentai/items', id);
-  if (!item || !(item.pages || []).length) {
-    content.innerHTML = errorHtml('Halaman galeri belum di-cache.');
-    return;
-  }
-  content.innerHTML = `
-    <div class="breadcrumbs muted">
-      <a href="#/doujin">Doujin</a> › <a href="#/doujin/${item.id}">${esc(item.titlePretty || item.id)}</a>
-    </div>
-    <div class="reader">
-      ${item.pages.map((url, i) => `<img src="${esc(url)}" alt="halaman ${i + 1}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`).join('')}
-    </div>
-    <div class="reader-nav">
-      <a href="#/doujin/${item.id}">Info</a>
-      <a href="#/doujin">Doujin lain</a>
-    </div>`;
-}
+/* ------------------------------------------------------------------- read */
 
-/* ----------------------------------------------------------------- router */
+const CH_CACHE = (chapterId) => `${CITY_CACHE_PREFIX}${chapterId}`;
+const DAY_MS = 24 * 3600 * 1000;
 
-const animeView = buildAnimeView();
-const mangadexMangaView = makeMangadexView('manga');
-const mangadexManhwaView = makeMangadexView('manhwa');
-
-async function route() {
-  const raw = location.hash.replace(/^#/, '') || '/';
-  const [path, queryString] = raw.split('?');
-  const params = new URLSearchParams(queryString || '');
-  const parts = path.split('/').filter(Boolean);
-  window.scrollTo(0, 0);
+async function chapterImages(chapterId) {
+  const cached = storeGet(CH_CACHE(chapterId));
+  if (Array.isArray(cached) && cached.length) return { urls: cached, via: 'cache' };
 
   try {
-    if (parts.length === 0) return await renderHome();
-    const [a, b, c] = parts;
-    if (a === 'anime' && !b) return await animeView(params);
-    if (a === 'manga' && !b) return await mangadexMangaView(params);
-    if (a === 'manhwa' && !b) return await mangadexManhwaView(params);
-    if (a === 'doujin' && !b) return await renderDoujin(params);
-    if (a === 'series' && b === 'gomunime') return await renderGomunimeSeries(c);
-    if (a === 'series' && b === 'samehadaku') return await renderSamehadakuSeries(c);
-    if (a === 'watch' && b === 'gomunime') return await renderGomunimeWatch(c);
-    if (a === 'watch' && b === 'samehadaku') return await renderSamehadakuWatch(c);
-    if (a === 'manga' && (b === 'manga' || b === 'manhwa') && c) return await renderMangaDetail(b, c);
-    if (a === 'read' && b === 'mangadex') return await renderMangaReader(c);
-    if (a === 'doujin' && b) return await renderDoujinDetail(b);
-    if (a === 'read' && b === 'nhentai') return await renderDoujinReader(c);
-    content.innerHTML = errorHtml('Halaman tidak dikenal.');
-  } catch (err) {
-    console.error(err);
-    content.innerHTML = errorHtml(`Gagal memuat: ${err.message}`);
+    const bucket = await fetch(`data/mangadex/chapters/${bucketOf(chapterId)}.json`);
+    if (bucket.ok) {
+      const record = (await bucket.json())[chapterId];
+      if (record?.hash && record?.files?.length) {
+        const urls = record.files.map((file) => `${UPLOADS}${record.hash}/${file}`);
+        storeSet(CH_CACHE(chapterId), urls);
+        return { urls, via: 'manifest' };
+      }
+    }
+  } catch { /* lanjut ke mirror */ }
+
+  // MangaDex API tidak mengirim ACAO; r.jina.ai wrapper JSON untuk browser.
+  const mirrorRes = await fetch(`${MIRROR}${chapterId}`, { headers: { Accept: 'application/json' } });
+  if (mirrorRes.ok) {
+    const wrapper = await mirrorRes.json();
+    const payload = JSON.parse(wrapper?.data?.content ?? '{}');
+    const hash = payload?.chapter?.hash;
+    const files = payload?.chapter?.data ?? [];
+    if (hash && files.length) {
+      const urls = files.map((file) => `${UPLOADS}${hash}/${file}`);
+      storeSet(CH_CACHE(chapterId), urls);
+      return { urls, via: 'mirror' };
+    }
+  }
+  throw new Error('Modul gambar tidak tersedia di bucket maupun mirror.');
+}
+
+function pagesGrid(urls) {
+  const grid = el('div', { class: 'reader' });
+  for (const url of urls) {
+    const safe = safeUrl(url);
+    if (!safe) continue;
+    const img = el('img', { loading: 'lazy', decoding: 'async', alt: '', src: safe, referrerpolicy: 'no-referrer' });
+    img.onerror = () => { img.src = PLACEHOLDER; };
+    grid.append(img);
+  }
+  return grid;
+}
+
+function viewRead(key, chapterId) {
+  const item = DATA.byKey.get(key);
+  if (!item) { viewHome(); return; }
+  setTitle(`Baca · ${item.title}`);
+
+  if (item.kind === 'doujin') {
+    const pages = item.pages ?? [];
+    view.append(
+      el('div', { class: 'reader-bar' },
+        el('a', { class: 'btn ghost', href: `#/item/${encodeURIComponent(item.key)}`, text: '←' }),
+        el('span', { text: `${fmtNum(pages.length)} halaman · ${item.title}` }),
+      ),
+      pagesGrid(pages),
+    );
+    return;
+  }
+
+  const pool = (item.chapters ?? []).slice().sort((a, b) => Number(a.number) - Number(b.number));
+  const chapter = pool.find((c) => String(c.id) === chapterId);
+  const navFromPool = (delta) => {
+    if (!chapter) return null;
+    const index = pool.findIndex((c) => String(c.id) === String(chapter.id));
+    const target = pool[index + delta];
+    return target ? `#/read/${encodeURIComponent(item.key)}/${encodeURIComponent(target.id)}` : null;
+  };
+
+  const picker = el('select', { onchange: (event) => { location.hash = `#/read/${encodeURIComponent(item.key)}/${event.target.value}`; } });
+  for (const c of pool) {
+    picker.append(el('option', { value: c.id, text: `Ch ${c.number}${c.volume ? ` · v${c.volume}` : ''}${c.title ? ` — ${c.title}` : ''}` }));
+  }
+  if (chapter) picker.value = chapter.id;
+
+  const info = el('span', { class: 'count', text: chapter ? `Ch ${textOr(chapter.number)}` : 'Chapter tidak ada di bundle' });
+  const reader = el('div', { class: 'reader' });
+
+  view.append(
+    el('div', { class: 'reader-bar' },
+      el('a', { class: 'btn ghost', href: `#/item/${encodeURIComponent(item.key)}`, text: '←' }),
+      picker,
+      info,
+    ),
+    reader,
+    el('div', { class: 'chapter-bar' },
+      navFromPool(-1) ? el('a', { class: 'btn', href: navFromPool(-1), text: '← Prev' }) : el('span'),
+      el('span'),
+      navFromPool(1) ? el('a', { class: 'btn', href: navFromPool(1), text: 'Next →' }) : el('span'),
+    ),
+  );
+
+  if (!chapter) {
+    reader.append(el('div', { class: 'empty', text: 'Chapter tidak ada di bundle. Balik ke daftar chapter.' }));
+    return;
+  }
+  info.textContent = 'memuat…';
+  chapterImages(chapter.id)
+    .then(({ urls, via }) => {
+      info.textContent = `${fmtNum(urls.length)} hal · via ${via}`;
+      reader.append(pagesGrid(urls));
+    })
+    .catch((error) => {
+      info.textContent = 'gagal';
+      reader.append(el('div', { class: 'empty', text: error.message }));
+      reader.append(el('button', {
+        class: 'btn primary', text: 'Coba lagi',
+        onclick: () => { storeDel(CH_CACHE(chapter.id)); route(); },
+      }));
+    });
+}
+
+/* -------------------------------------------------------------- search dll */
+
+function viewSearch(query) {
+  const q = query.trim().toLowerCase();
+  setTitle(q ? `Cari “${query}”` : 'Cari');
+  view.textContent = '';
+  if (q.length < 2) {
+    view.append(el('div', { class: 'empty', text: 'Ketik minimal 2 karakter di kotak atas.' }));
+    return;
+  }
+  let total = 0;
+  for (const kind of KINDS) {
+    const hits = DATA.lists[kind].filter((item) => matches(item, q));
+    if (hits.length === 0) continue;
+    total += hits.length;
+    view.append(el('section', { class: 'hit-group' },
+      el('h2', { text: `${KIND_LABEL[kind]} · ${fmtNum(hits.length)}` }),
+      el('div', { class: 'cards' }, ...hits.slice(0, 24).map(card)),
+    ));
+  }
+  if (total === 0) view.append(el('div', { class: 'empty', text: 'Tidak ada hasil.' }));
+}
+
+function viewFavorites() {
+  setTitle('Favorit');
+  view.textContent = '';
+  const items = [...favorites].map((key) => DATA.byKey.get(key) ?? favFallback(key)).filter(Boolean);
+  if (items.length === 0) {
+    view.append(el('div', { class: 'empty', text: 'Belum ada favorit. Tekan ☆ di halaman judul.' }));
+    return;
+  }
+  view.append(
+    el('div', { class: 'page-head' }, el('h2', { text: 'Favoritku' }), el('span', { class: 'count', text: `${fmtNum(items.length)}` })),
+    el('div', { class: 'cards' }, ...items.map(card)),
+  );
+}
+function favFallback(key) {
+  const meta = favMeta.get(key);
+  if (!meta) return null;
+  return { key, title: meta.title, poster: meta.poster, kind: meta.kind ?? 'anime', rating: null };
+}
+
+/* ---------------------------------------------------------------- settings */
+
+function viewSettings() {
+  setTitle('Pengaturan');
+  const bundle = DATA.bundle;
+  const counts = bundle?.counts ?? {};
+  view.textContent = '';
+  view.append(
+    el('div', { class: 'page-head' }, el('h2', { text: 'Pengaturan' })),
+    panel('Bundle', [
+      `dibangun: ${bundle?.generatedAt ?? '—'}`,
+      `${fmtNum(counts.anime)} anime · ${fmtNum(counts.manga)} manga · ${fmtNum(counts.manhwa)} manhwa · ${fmtNum(counts.doujin)} doujin`,
+      `cache chapter: 7 hari`,
+    ]),
+    panel('Kunci', [
+      btnAction('Tukar passphrase…', () => { storeDel(KEY_STORE); location.reload(); }),
+      storeGet(KEY_STORE) ? null : el('span', { class: 'badge', text: 'belum tersimpan' }),
+      btnAction('Ganti tema terang/gelap', () => {
+        const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = next;
+        storeSet('nimeku-theme', next, 365 * 24 * 3600 * 1000);
+        toast(`Tema: ${next === 'dark' ? 'gelap' : 'terang'}`);
+      }),
+    ]),
+    panel('Data lokal', [
+      btnAction('Hapus cache gambar', () => {
+        Object.keys(localStorage).filter((key) => key.startsWith('nimeku-ch:')).forEach(storeDel);
+        toast('Cache chapter dihapus');
+      }),
+      btnAction('Reset web storage', () => { localStorage.clear(); location.reload(); }),
+    ]),
+  );
+}
+
+function panel(title, lines) {
+  const flow = el('div', { class: 'genre-flow' });
+  for (const line of lines) {
+    if (typeof line === 'string') flow.append(el('span', { class: 'badge', text: line }));
+    else if (line) flow.append(line);
+  }
+  return el('section', { class: 'genre-panel' }, el('h2', { text: title }), flow);
+}
+function btnAction(label, fn) { return el('button', { class: 'btn', text: label, onclick: fn }); }
+
+/* --------------------------------------------------------------- gerbang */
+
+function showUnlock(message) {
+  const root = $('#unlock');
+  root.hidden = false;
+  $('#unlockErr').textContent = message ?? '';
+  const form = $('#unlockForm');
+  if (form.dataset.wired) return;
+  form.dataset.wired = '1';
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const pass = $('#unlockInput').value.trim();
+    const remember = $('#unlockRemember').checked;
+    try {
+      await bootData(pass, remember);
+      hideUnlock();
+      route();
+    } catch (error) {
+      $('#unlockErr').textContent = error.message;
+    }
+  });
+}
+function hideUnlock() { $('#unlock').hidden = true; }
+
+/* ------------------------------------------------------------- shell & boot */
+
+function setupShell() {
+  window.addEventListener('hashchange', route);
+  $('#menuBtn').addEventListener('click', () => document.body.toggleAttribute('data-nav-open'));
+  document.addEventListener('click', (event) => {
+    if (document.body.hasAttribute('data-nav-open') && !event.target.closest('#sidebar, #menuBtn')) {
+      document.body.removeAttribute('data-nav-open');
+    }
+  });
+  const input = $('#searchInput');
+  const go = () => {
+    const q = input.value.trim();
+    location.hash = `#/search#q=${encodeURIComponent(q)}`;
+    route();
+  };
+  input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); go(); } });
+  $('#searchGo').addEventListener('click', go);
+
+  document.body.append(el('div', { class: 'tabbar', id: 'tabbar', role: 'navigation' }));
+  const scrim = el('div', { class: 'scrim' });
+  document.body.append(scrim);
+  scrim.addEventListener('click', () => document.body.removeAttribute('data-nav-open'));
+}
+
+async function start() {
+  document.documentElement.dataset.theme = storeGet('nimeku-theme') || 'light';
+  hookSecurity();
+  setupShell();
+  try {
+    await bootData();
+    route();
+  } catch (error) {
+    showUnlock(error instanceof UnlockNeeded ? '' : error.message);
   }
 }
 
-searchForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const q = searchInput.value.trim();
-  const raw = location.hash.replace(/^#/, '') || '/';
-  const tab = raw.split('?')[0].split('/').filter(Boolean)[0] || 'anime';
-  const allowed = ['anime', 'manga', 'manhwa', 'doujin'];
-  const target = allowed.includes(tab) ? tab : 'anime';
-  location.hash = `#/${target}${q ? `?q=${encodeURIComponent(q)}` : ''}`;
-});
-
-window.addEventListener('hashchange', route);
-
-(async function boot() {
-  try {
-    const meta = await getJson(`${DATA}meta.json`);
-    const counts = meta?.state || {};
-    const parts = [
-      counts.gomunime ? `${counts.gomunime.series} series / ${counts.gomunime.episodes} episode` : null,
-      counts.samehadaku ? `${counts.samehadaku.anime} anime / ${counts.samehadaku.episodes} episode` : null,
-      counts.mangadex ? `${counts.mangadex.items} manga · ${counts.mangadex.chaptersBaked} chapter siap` : null,
-      counts.nhentai ? `${counts.nhentai.items} doujin` : null,
-      meta?.generatedAt ? `refresh ${fmtDate(meta.generatedAt)}` : null,
-    ].filter(Boolean);
-    statusEl.textContent = parts.join(' · ') || 'siap';
-  } catch {
-    statusEl.textContent = 'data belum tersedia';
-  }
-  route();
-})();
+start();
