@@ -5,14 +5,28 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: cors + hotlink probe
+      - name: proxy + cdn probe
         run: |
           CH=1ec0bbf3-f940-405c-a266-23a0b6118f8b
-          echo "=== at-home FULL headers (Origin github.io) ==="
-          curl -s -o /dev/null -D - -H "Origin: https://seanotsi.github.io" "https://api.mangadex.org/at-home/server/$CH"
-          echo "=== at-home FULL headers (no Origin) ==="
-          curl -s -o /dev/null -D - "https://api.mangadex.org/at-home/server/$CH"
-          echo "=== chapter metadata FULL headers (Origin github.io) ==="
-          curl -s -o /dev/null -D - -H "Origin: https://seanotsi.github.io" "https://api.mangadex.org/chapter/$CH"
-          echo "=== OPTIONS preflight ==="
-          curl -s -o /dev/null -D - -X OPTIONS -H "Origin: https://seanotsi.github.io" -H "Access-Control-Request-Method: GET" "https://api.mangadex.org/at-home/server/$CH"
+          curl -s "https://api.mangadex.org/at-home/server/$CH" -o /tmp/ah.json
+          node -e '
+            const j = require("/tmp/ah.json");
+            const hash = j.chapter.hash, f = j.chapter.data[0];
+            console.log("hash=" + hash);
+            console.log("file=" + f);
+            console.log("MDH=" + j.baseUrl + "/data/" + hash + "/" + f);
+            console.log("UPLOADS=https://uploads.mangadex.org/data/" + hash + "/" + f);
+            require("fs").writeFileSync("/tmp/urls.txt", hash + " " + f + "\n");
+          '
+          HASH=$(cut -d' ' -f1 /tmp/urls.txt); FILE=$(cut -d' ' -f2 /tmp/urls.txt)
+          echo "=== uploads.mangadex.org/data ==="
+          curl -s -o /dev/null -w 'status %{http_code} type %{content_type} bytes %{size_download}\n' "https://uploads.mangadex.org/data/$HASH/$FILE"
+          echo "=== uploads with github referer ==="
+          curl -s -o /dev/null -w 'status %{http_code} bytes %{size_download}\n' -H "Referer: https://seanotsi.github.io/" "https://uploads.mangadex.org/data/$HASH/$FILE"
+          ENC=$(node -e 'console.log(encodeURIComponent("https://api.mangadex.org/at-home/server/"+process.argv[1]))' "$CH")
+          for P in "https://api.allorigins.win/raw?url=$ENC" "https://api.codetabs.com/v1/proxy?quest=$ENC" "https://corsproxy.io/?url=$ENC"; do
+            echo "=== proxy $P"
+            curl -s -m 30 -o /tmp/p.json -D /tmp/p.h -H "Origin: https://seanotsi.github.io" "$P"
+            grep -iE '^(HTTP/|access-control-allow-origin|content-type)' /tmp/p.h
+            head -c 60 /tmp/p.json; echo
+          done
