@@ -1,0 +1,25 @@
+name: probe-md
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: cors + hotlink probe
+        run: |
+          CH=1ec0bbf3-f940-405c-a266-23a0b6118f8b
+          echo "=== at-home headers (Origin github.io) ==="
+          curl -s -o /tmp/athome.json -D /tmp/athome.h -H "Origin: https://seanotsi.github.io" "https://api.mangadex.org/at-home/server/$CH"
+          grep -iE '^(HTTP/|access-control-allow-origin|access-control-allow-methods|content-type|vary)' /tmp/athome.h
+          node -e '
+            const j = require("/tmp/athome.json");
+            console.log("baseUrl", j.baseUrl, "hash", j.chapter.hash, "files", j.chapter.data.length);
+            console.log("IMG=" + j.baseUrl + "/data/" + j.chapter.hash + "/" + j.chapter.data[0]);
+          ' | tee /tmp/out.txt
+          IMG=$(grep -o 'IMG=.*' /tmp/out.txt | cut -c5-)
+          echo "=== image HEAD no referer ==="
+          curl -s -o /dev/null -D - "$IMG" | grep -iE '^(HTTP/|content-type|content-length|access-control|cf-)'
+          echo "=== image HEAD with github.io referer ==="
+          curl -s -o /dev/null -D - -H "Referer: https://seanotsi.github.io/" "$IMG" | grep -iE '^(HTTP/|content-type|content-length|access-control)'
+          echo "=== image GET size ==="
+          curl -s -o /dev/null -w 'status %{http_code} bytes %{size_download}\n' "$IMG"
