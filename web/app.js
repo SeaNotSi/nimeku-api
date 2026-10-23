@@ -7,7 +7,7 @@
 /* ------------------------------------------------------------------ config */
 
 const CFG = window.NX || {};
-const BUNDLE_URL = CFG.bundle || '/data/api.enc.json';
+const BUNDLE_URL = CFG.bundle || 'data/api.enc.json';
 const MIRROR = CFG.mirror || 'https://r.jina.ai/https://api.mangadex.org/at-home/server/';
 const UPLOADS = CFG.uploads || 'https://uploads.mangadex.org/data/';
 const KEY_STORE = 'nimeku-key';
@@ -238,7 +238,7 @@ function ingestItem(item, kind, source, id) {
 
 async function fetchTaxonomy() {
   try {
-    const res = await fetch('/data/samehadaku/taxonomy.json');
+    const res = await fetch('data/samehadaku/taxonomy.json');
     if (!res.ok) return null;
     const tax = await res.json();
     return tax?.genre && Object.keys(tax.genre).length > 0 ? tax : null;
