@@ -361,7 +361,7 @@ async function scrapeMangadex(state) {
   if (!DRY) await store.flush();
 
   // Chapter pass: newest titles first; feed refreshes weekly, pages fill by budget.
-  const chapterBudget = Number(args.get('pagebudget') || (MODE === 'full' ? 2500 : 200));
+  const chapterBudget = Number(args.get('pagebudget') || (MODE === 'full' ? 25000 : 800));
   const perTitle = Number(args.get('chapters') || 40);
   const titles = store
     .values()
@@ -410,8 +410,8 @@ async function scrapeMangadex(state) {
         continue;
       }
       try {
-        const pages = await client.chapterPages(chapter.id);
-        if (!pages.length) continue;
+        const manifest = await client.chapterManifest(chapter.id);
+        if (!manifest) continue;
         chapterStore.set(chapter.id, {
           id: chapter.id,
           mangaId: record.id,
@@ -421,7 +421,8 @@ async function scrapeMangadex(state) {
           volume: chapter.volume,
           title: chapter.title,
           lang: chapter.lang,
-          pages,
+          hash: manifest.hash,
+          files: manifest.files,
           createdAt: chapter.createdAt,
           scrapedAt: isoNow(),
         });
@@ -435,9 +436,9 @@ async function scrapeMangadex(state) {
     store.set(entry.id, record);
   });
 
-  // Bound the repo: at-home URLs are the only data that grows fast, so the
-  // chapter store evicts its oldest entries whenever it crosses the cap.
-  const chapterCap = Number(args.get('chaptercap') || (MODE === 'full' ? 4000 : 2400));
+  // A manifest is ~1 KB and never goes stale, so the cap only guards against
+  // runaway growth; eviction would silently un-bake chapters that are still listed.
+  const chapterCap = Number(args.get('chaptercap') || 60000);
   if (chapterStore.size > chapterCap) {
     const doomed = chapterStore
       .values()

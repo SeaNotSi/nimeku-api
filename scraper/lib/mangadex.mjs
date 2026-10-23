@@ -109,13 +109,18 @@ export class MangadexClient {
   }
 
   /** Original-quality page URLs for one chapter via the at-home server. */
-  async chapterPages(chapterId) {
+  /**
+   * MangaDex@Home hands back the CDN node plus the file list for one chapter.
+   * The same files are also served from uploads.mangadex.org/data/<hash>/<file>
+   * with no referer or CORS requirement, so only the hash and file names need
+   * storing; the reader rebuilds the URLs itself.
+   */
+  async chapterManifest(chapterId) {
     const json = await this.http.json(`${MANGADEX_ORIGIN}/at-home/server/${chapterId}`);
-    const base = json.baseUrl;
     const hash = json.chapter && json.chapter.hash;
     const files = (json.chapter && json.chapter.data) || [];
-    if (!base || !hash || files.length === 0) return [];
-    return files.map((file) => `${base}/data/${hash}/${file}`);
+    if (!hash || files.length === 0) return null;
+    return { hash, files };
   }
 
   async statistics(ids) {

@@ -653,11 +653,29 @@ async function renderMangaDetail(lane, id) {
     </div>`;
 }
 
+/**
+ * Chapter records carry either full page URLs (older bake) or a manifest of
+ * { hash, files } taken from MangaDex@Home. The uploads CDN serves the same
+ * files without a referer or CORS requirement, so the reader rebuilds them.
+ */
+function chapterImageUrls(chapter) {
+  if (Array.isArray(chapter.pages) && chapter.pages.length > 0) return chapter.pages;
+  if (chapter.hash && Array.isArray(chapter.files) && chapter.files.length > 0) {
+    return chapter.files.map((file) => `https://uploads.mangadex.org/data/${chapter.hash}/${file}`);
+  }
+  return [];
+}
+
 async function renderMangaReader(chapterId) {
   content.innerHTML = loaderHtml();
   const chapter = await bucketRecord('mangadex/chapters', chapterId);
   if (!chapter) {
     content.innerHTML = errorHtml('Chapter ini belum di-cache. Buka lagi setelah refresh berikutnya.');
+    return;
+  }
+  const images = chapterImageUrls(chapter);
+  if (!images.length) {
+    content.innerHTML = errorHtml('Daftar halaman chapter ini kosong di sumber.');
     return;
   }
   const item = await bucketRecord('mangadex/items', chapter.mangaId);
@@ -673,7 +691,7 @@ async function renderMangaReader(chapterId) {
       <span>Chapter ${esc(chapter.number ?? '')}</span>
     </div>
     <div class="reader">
-      ${chapter.pages.map((url, i) => `<img src="${esc(url)}" alt="halaman ${i + 1}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`).join('')}
+      ${images.map((url, i) => `<img src="${esc(url)}" alt="halaman ${i + 1}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`).join('')}
     </div>
     <div class="reader-nav">
       ${prev ? `<a href="#/read/mangadex/${prev.id}">‹ Ch ${esc(prev.number)}</a>` : '<span>‹ Ch —</span>'}
