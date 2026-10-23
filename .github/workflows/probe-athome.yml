@@ -5,20 +5,28 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: proxy candidates for at-home json
+      - name: jina json mode
         run: |
           CH=1ec0bbf3-f940-405c-a266-23a0b6118f8b
-          TARGET="https://api.mangadex.org/at-home/server/$CH"
-          ENC=$(node -e 'console.log(encodeURIComponent(process.argv[1]))' "$TARGET")
-          probe() {
-            name="$1"; url="$2"
-            echo "--- $name"
-            curl -s -m 25 -o /tmp/body -D /tmp/hdr -H "Origin: https://seanotsi.github.io" "$url"
-            grep -iE '^(HTTP/|access-control-allow-origin|content-type)' /tmp/hdr | tr -d '\r'
-            head -c 90 /tmp/body | tr -d '\n'; echo
-            node -e 'try{const j=JSON.parse(require("fs").readFileSync("/tmp/body","utf8"));console.log("JSON ok, hash",j.chapter&&j.chapter.hash,"files",j.chapter&&j.chapter.data&&j.chapter.data.length)}catch(e){console.log("not raw json")}'
-          }
-          probe allorigins "https://api.allorigins.win/raw?url=$ENC"
-          probe codetabs "https://api.codetabs.com/v1/proxy?quest=$ENC"
-          probe jina "https://r.jina.ai/$TARGET"
-          probe corsproxy "https://corsproxy.io/?url=$ENC"
+          echo "=== plain body ==="
+          curl -s -m 30 -D /tmp/h1 -H "Origin: https://seanotsi.github.io" "https://r.jina.ai/https://api.mangadex.org/at-home/server/$CH" -o /tmp/b1
+          grep -iE '^(HTTP/|access-control-allow-origin|content-type|content-length)' /tmp/h1 | tr -d '\r'
+          wc -c < /tmp/b1
+          head -c 400 /tmp/b1; echo; echo "..."; tail -c 200 /tmp/b1; echo
+          echo "=== accept json ==="
+          curl -s -m 30 -D /tmp/h2 -H "Origin: https://seanotsi.github.io" -H "Accept: application/json" "https://r.jina.ai/https://api.mangadex.org/at-home/server/$CH" -o /tmp/b2
+          grep -iE '^(HTTP/|access-control-allow-origin|content-type)' /tmp/h2 | tr -d '\r'
+          node -e '
+            const raw = require("fs").readFileSync("/tmp/b2","utf8");
+            console.log("bytes", raw.length);
+            try {
+              const j = JSON.parse(raw);
+              console.log("keys", Object.keys(j).slice(0,6));
+              const content = j.data && j.data.content || j.content;
+              console.log("content type", typeof content, String(content||"").slice(0,80));
+              if (typeof content === "string") {
+                try { const inner = JSON.parse(content); console.log("inner hash", inner.chapter.hash.slice(0,8), "files", inner.chapter.data.length); }
+                catch { console.log("inner not json"); }
+              }
+            } catch { console.log("outer not json:", raw.slice(0,120)); }
+          '
